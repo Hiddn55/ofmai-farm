@@ -1,6 +1,6 @@
 """Warming policy: what an account may do on a given day of its life.
 
-Mirrors ``documentation/social/warming-policy.md`` in the OFMAI repo. Numbers
+Mirrors ``docs/social/warming-policy.md`` in the OFMAI repo. Numbers
 here are **caps**, never targets: each day the budget draws a value between
 40 % and 100 % of the cap, deterministically for (account, date), so a retry
 of the same day never grants more.

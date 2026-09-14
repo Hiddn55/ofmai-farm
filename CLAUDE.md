@@ -28,3 +28,7 @@ Works from PC and on-device — always emits audio from the phone.
 
 All `mcp__android-agent__*` tools are already loaded by the MCP server. To use any of them:
 `ToolSearch({"query": "select:mcp__android-agent__<tool_name>"})` then call it directly.
+
+## OFMAI farm — machine M1 (armée de personnages)
+
+Le cahier des charges complet (règles, architecture, GeeLark + proxies, création de comptes, chauffe, contenu, publication, santé, pont OFMAI ↔ ferme, attribution, personas, plan de construction) vit dans `docs/social/` : commencer par `docs/social/INDEX.md`, puis `docs/social/00-brief-decisions.md` (les décisions prises avec Nathan). `gitd/farm/policy.py` reflète `docs/social/warming-policy.md`. Le repo OFMAI (plateforme) est un projet séparé ; les endpoints côté OFMAI décrits dans `docs/social/bridge-ofmai-farm.md` s'implémentent là-bas.

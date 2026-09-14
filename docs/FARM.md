@@ -7,7 +7,7 @@ ghost jobs. Nothing in ghost's core is modified; upstream merges stay clean.
 
 The operating rules (why Android, one account = one device = one IP, US
 proxies, what a day of warming looks like) live in the OFMAI repo under
-`documentation/social/`. This file is the code map.
+`docs/social/`. This file is the code map.
 
 ## Map
 
