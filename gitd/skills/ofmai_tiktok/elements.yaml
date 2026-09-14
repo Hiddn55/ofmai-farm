@@ -1,0 +1,76 @@
+# TikTok UI elements — fallback chain: content_desc -> text -> resource_id -> coords
+#
+# STATUS: resource ids copied from ghost's public tiktok skill (verified on
+# TikTok v44.3.3, ASUS ROG Phone II 1080x2400 and Galaxy A15); the rest comes
+# from en-US accessibility labels and is NOT yet verified. Run Skill Miner on
+# the first phone, fix here, fill `tested_on` in skill.yaml.
+#
+# Feed buttons carry counts in their label ("Like 12.3K"): actions/core.py
+# matches by *contains*, these entries are the exact-match fast path.
+
+# -- Bottom navigation ---------------------------------------------------------
+home_tab:
+  content_desc: "Home"
+  text: "Home"
+friends_tab:
+  text: "Friends"
+create_tab:
+  content_desc: "Create"
+  resource_id: "com.zhiliaoapp.musically:id/m76"
+inbox_tab:
+  text: "Inbox"
+profile_tab:
+  text: "Profile"
+  resource_id: "com.zhiliaoapp.musically:id/n19"
+
+# -- For You feed --------------------------------------------------------------
+like_button:
+  content_desc: "Like"
+comment_button:
+  content_desc: "Comment"
+share_button:
+  content_desc: "Share"
+favorite_button:
+  content_desc: "Favorites"
+author_avatar:
+  content_desc: "Profile photo"
+follow_on_feed:
+  content_desc: "Follow"
+
+# -- Comments sheet --------------------------------------------------------------
+comment_input:
+  text: "Add comment..."
+comment_send:
+  content_desc: "Post"
+
+# -- Profile ----------------------------------------------------------------------
+follow_button:
+  text: "Follow"
+following_button:
+  text: "Following"
+username_row:
+  resource_id: "com.zhiliaoapp.musically:id/zef"
+back_button:
+  content_desc: "Back"
+
+# -- Search -------------------------------------------------------------------------
+search_icon:
+  content_desc: "Search"
+  resource_id: "com.zhiliaoapp.musically:id/j4d"
+search_box:
+  resource_id: "com.zhiliaoapp.musically:id/gti"
+
+# -- Create / post ------------------------------------------------------------------
+upload_button:
+  text: "Upload"
+gallery_first_item:
+  content_desc: "Video"
+next_button:
+  text: "Next"
+caption_input:
+  text: "Describe your video"
+  resource_id: "com.zhiliaoapp.musically:id/caption_input"
+post_button:
+  text: "Post"
+aigc_toggle:
+  text: "AI-generated content"

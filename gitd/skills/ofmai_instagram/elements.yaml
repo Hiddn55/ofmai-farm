@@ -1,0 +1,84 @@
+# Instagram UI elements — fallback chain: content_desc -> text -> resource_id -> coords
+#
+# STATUS: written from the en-US accessibility labels of Instagram for Android
+# (2026). NOT yet verified on a device: run Skill Miner on the first phone,
+# then fix the ids here and fill `tested_on` in skill.yaml. Keep content_desc
+# first: labels survive app updates far better than resource ids.
+#
+# Many buttons are found by *contains* matching in actions/core.py (e.g. the
+# like button's label is "Like" or "Liked"; a story's label ends with
+# "'s story"). Entries below are the exact-match fast path.
+
+# -- Bottom navigation ---------------------------------------------------------
+home_tab:
+  content_desc: "Home"
+  resource_id: "com.instagram.android:id/feed_tab"
+search_tab:
+  content_desc: "Search and explore"
+  resource_id: "com.instagram.android:id/search_tab"
+reels_tab:
+  content_desc: "Reels"
+  resource_id: "com.instagram.android:id/clips_tab"
+create_tab:
+  content_desc: "Create"
+  resource_id: "com.instagram.android:id/creation_tab"
+profile_tab:
+  content_desc: "Profile"
+  resource_id: "com.instagram.android:id/profile_tab"
+
+# -- Reels viewer --------------------------------------------------------------
+like_button:
+  content_desc: "Like"
+liked_button:
+  content_desc: "Liked"
+comment_button:
+  content_desc: "Comment"
+share_button:
+  content_desc: "Share"
+more_button:
+  content_desc: "More options"
+save_button:
+  content_desc: "Save"
+author_avatar:
+  content_desc: "Profile picture"
+author_name:
+  resource_id: "com.instagram.android:id/clips_username"
+
+# -- Comments sheet -------------------------------------------------------------
+comment_input:
+  text: "Add a comment…"
+  resource_id: "com.instagram.android:id/layout_comment_thread_edittext"
+comment_post:
+  content_desc: "Post"
+  resource_id: "com.instagram.android:id/layout_comment_thread_post_button"
+
+# -- Profile ---------------------------------------------------------------------
+follow_button:
+  text: "Follow"
+following_button:
+  text: "Following"
+back_button:
+  content_desc: "Back"
+
+# -- Search --------------------------------------------------------------------
+search_input:
+  resource_id: "com.instagram.android:id/action_bar_search_edit_text"
+
+# -- Stories (home) ---------------------------------------------------------------
+your_story:
+  content_desc: "Your story"
+
+# -- Create / post ------------------------------------------------------------------
+create_reel:
+  text: "REEL"
+create_post:
+  text: "POST"
+gallery_first_item:
+  resource_id: "com.instagram.android:id/gallery_grid_item_thumbnail"
+next_button:
+  content_desc: "Next"
+caption_input:
+  text: "Write a caption..."
+  resource_id: "com.instagram.android:id/caption_input_text_view"
+share_button_final:
+  text: "Share"

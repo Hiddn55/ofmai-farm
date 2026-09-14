@@ -1,0 +1,66 @@
+name: ofmai_instagram
+display_name: OFMAI Instagram
+description: Instagram warming, posting and replies for OFMAI characters — humanised, budgeted by the farm ledger
+version: "0.1.0"
+app_package: com.instagram.android
+author: OFMAI
+license: MIT
+
+exports:
+  actions:
+    - name: open_app
+      description: Launch Instagram on the home feed
+    - name: go_reels
+      description: Open the Reels tab
+  workflows:
+    - name: warm_session
+      description: One humanised warming session driven by today's budget
+      params:
+        handle: { type: string, required: true }
+        minutes: { type: number, required: false }
+        comments: { type: string, required: false, description: "newline-separated ASCII comments" }
+        niche: { type: string, required: false, description: "comma-separated hashtags" }
+    - name: post_video
+      description: Publish a Reel from the device gallery (most recent item) with a caption
+      params:
+        handle: { type: string, required: true }
+        caption: { type: string, required: true }
+
+popup_detectors:
+  - detect: "Turn on Notifications"
+    button: "Not Now"
+    label: "Notifications popup"
+  - detect: "Save Your Login Info"
+    button: "Not Now"
+    label: "Save login popup"
+  - detect: "Add Account"
+    button: "Not Now"
+    label: "Add account popup"
+  - detect: "Allow Instagram to access"
+    button: "Don’t allow"
+    label: "Permission request"
+  - detect: "Add Instagram to your Home screen"
+    button: "Not now"
+    label: "Home screen shortcut"
+  - detect: "Welcome to Reels"
+    button: "OK"
+    label: "Reels intro"
+  - detect: "Update Instagram"
+    button: "Not Now"
+    label: "Update nag"
+
+default_params:
+  workflows:
+    warm_session:
+      handle: ""
+      minutes: 0
+      comments: ""
+      niche: ""
+    post_video:
+      handle: ""
+      caption: ""
+
+# Health signals ("Action Blocked", "Confirm it's you", ...) are matched by
+# gitd/farm/health.py, not here: they end the session instead of being dismissed.
+
+tested_on: []

@@ -1,0 +1,68 @@
+name: ofmai_tiktok
+display_name: OFMAI TikTok
+description: TikTok warming, posting and replies for OFMAI characters — humanised, budgeted by the farm ledger
+version: "0.1.0"
+app_package: com.zhiliaoapp.musically
+author: OFMAI
+license: MIT
+
+exports:
+  actions:
+    - name: open_app
+      description: Launch TikTok on the For You feed
+  workflows:
+    - name: warm_session
+      description: One humanised warming session driven by today's budget
+      params:
+        handle: { type: string, required: true }
+        minutes: { type: number, required: false }
+        comments: { type: string, required: false, description: "newline-separated ASCII comments" }
+        niche: { type: string, required: false, description: "comma-separated hashtags" }
+    - name: post_video
+      description: Publish the newest gallery video with a caption
+      params:
+        handle: { type: string, required: true }
+        caption: { type: string, required: true }
+
+popup_detectors:
+  - detect: "Continue editing"
+    button: "Save draft"
+    label: "Draft resume overlay"
+  - detect: "connect with people"
+    button: "Don't allow"
+    label: "Contacts access popup"
+  - detect: "access to your Facebook"
+    button: "Don't allow"
+    label: "Facebook friends access popup"
+  - detect: "shared collections"
+    button: "Not now"
+    label: "Shared collections popup"
+  - detect: "Turn on notifications"
+    button: "Not now"
+    label: "Notifications popup"
+  - detect: "Swipe up for more"
+    button: "_back"
+    label: "Feed tutorial"
+    method: "back"
+  - detect: "Choose your interests"
+    button: "Skip"
+    label: "Interest picker"
+  - detect: "Add a bio"
+    button: "Not now"
+    label: "Bio nag"
+
+default_params:
+  workflows:
+    warm_session:
+      handle: ""
+      minutes: 0
+      comments: ""
+      niche: ""
+    post_video:
+      handle: ""
+      caption: ""
+
+# Health signals ("You're tapping too fast", "Verify to continue", ...) are
+# matched by gitd/farm/health.py and end the session; never dismissed here.
+
+tested_on: []
