@@ -8,7 +8,7 @@ from __future__ import annotations
 
 import uuid
 from dataclasses import dataclass
-from datetime import date, datetime, timedelta
+from datetime import UTC, date, datetime, timedelta
 from zoneinfo import ZoneInfo
 
 from sqlalchemy import func, select
@@ -174,7 +174,7 @@ class FarmSession:
         self.account.health = new.status.value
         self.account.health_until = new.until.isoformat() if new.until else None
         self.account.phase_override = new.phase_override.value if new.phase_override else None
-        self.account.updated_at = datetime.utcnow().isoformat(timespec="seconds")
+        self.account.updated_at = datetime.now(UTC).isoformat(timespec="seconds")
         self.db.commit()
         return new
 
