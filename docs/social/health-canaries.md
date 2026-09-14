@@ -6,7 +6,7 @@
 > **Répond à** : comment la ferme sait qu'un compte est en danger, ce qu'elle fait toute seule, ce qu'elle laisse à un humain, et comment on voit tout ça
 > **Code concerné** : fork ofmai-farm `gitd/farm/health.py`, `gitd/farm/policy.py` (§ Health state machine), `gitd/farm/ledger.py`, `gitd/farm/warm.py`, `gitd/farm/skillkit.py`, `gitd/farm/planner.py`, `gitd/farm/cli.py`, `gitd/farm/models.py`, `gitd/skills/checkpoint.py`, `gitd/routers/scheduler.py`, `frontend/src/views/SchedulerView.vue`, `tests/test_farm_health.py`, `tests/test_farm_policy.py`, `tests/test_farm_ledger.py` ; OFMAI `lib/core/discord-alerts.ts`, `.claude/loop/notify.mjs`, `app/api/farm/events` (à créer, `bridge-ofmai-farm.md`), `lib/social/health.ts` (à créer)
 
-Les règles absolues sont fixées dans `rules.md` (R17, R19, R26-R33) ; ce fichier dit comment elles s'exécutent. Le transport des signaux vers OFMAI est dans `bridge-ofmai-farm.md` (événement `health_signal`, champ `paused_until`), le relevé des vues dans `metrics-attribution.md` (§5.2, table `farm_post_metrics`), les chiffres de chauffe dans `warming-policy.md`, la configuration du profil observateur dans `infrastructure-geelark-proxies.md`.
+Les règles absolues sont fixées dans `rules.md` (R16, R18, R25-R32) ; ce fichier dit comment elles s'exécutent. Le transport des signaux vers OFMAI est dans `bridge-ofmai-farm.md` (événement `health_signal`, champ `paused_until`), le relevé des vues dans `metrics-attribution.md` (§5.2, table `farm_post_metrics`), les chiffres de chauffe dans `warming-policy.md`, la configuration du profil observateur dans `infrastructure-geelark-proxies.md`.
 
 ## 1. Signaux existants : `gitd/farm/health.py`
 
@@ -91,10 +91,10 @@ Détails vérifiés dans `gitd/farm/ledger.py` :
 | S2 | Shadowban suspecté → 7 jours consommation seule | `SHADOWBAN_DAYS = 7`, override `consume` | l'émission du signal (§2) |
 | S3 | **Deux comptes rouges en 48 h sur une plateforme → plateforme en pause 48 h** | rien | `gitd/farm/collective.py` (ci-dessous) + miroir OFMAI |
 | S4 | **Trois comptes `suspended` en 48 h sur une plateforme → plateforme coupée** jusqu'à post-mortem daté dans `docs/social/decisions/` | rien | idem, `cut = 1`, levée manuelle seulement |
-| S5 | **L'IP statique ne change jamais** (R19) : une `verification` se résout sur l'appareil, avec la même IP. Rayon d'un `suspended` (même règle dans R19, `infrastructure-geelark-proxies.md` §3, `account-creation.md` §9) : **1ᵉʳ `suspended` sur un téléphone** → la plateforme est abandonnée sur ce téléphone (`accounts disable`, `pm clear <package>`, `SocialAccount.status = banned`, 30 j sans nouvelle inscription sur cette plateforme), les autres comptes du personnage continuent avec un canari quotidien pendant 7 j ; **2ᵉ `suspended` sur le même téléphone dans les 30 j, toute plateforme** → téléphone et IP en quarantaine 30 j, tous les comptes `disable`, profil supprimé, IP rendue jamais réaffectée, le personnage repart sur un nouveau profil et de nouveaux comptes (runbook §10) | `QUARANTINE_DAYS = 30` (informatif) | la quarantaine est un geste GeeLark/IPRoyal manuel (`infrastructure-geelark-proxies.md`) |
-| S6 | **Retraits Reddit par sub** : un post retiré = un strike sur le sub pour ce personnage ; 2 strikes sur un sub → sub retiré de sa liste (`publishing.md`), **sans** pause du compte ; un retrait d'un post qui contenait un lien (violation R23) ou un message de modération citant « ban »/« spam » → `action_blocked` (48 h) | rien | `farm_post_metrics.removed` (`metrics-attribution.md`) + compteur par sub dans la fiche persona côté OFMAI |
-| S7 | Premier `HTTP 429` sur une API X/Reddit → `action_blocked`, aucun réessai (incident @potter_society, R17) | rien (aucun chemin API) | `ledger.signal_api(account, kind, matched)` — même écriture que `FarmSession.signal`, sans session |
-| S8 | Un signal arrête la session en cours, sans réessai (R28) | `check_health` → `break` ; `WarmSessionAction.max_retries = 1` | `check_health` dans `post_video` (§1) |
+| S5 | **L'IP statique ne change jamais** (R18) : une `verification` se résout sur l'appareil, avec la même IP. Rayon d'un `suspended` (même règle dans R18, `infrastructure-geelark-proxies.md` §3, `account-creation.md` §9) : **1ᵉʳ `suspended` sur un téléphone** → la plateforme est abandonnée sur ce téléphone (`accounts disable`, `pm clear <package>`, `SocialAccount.status = banned`, 30 j sans nouvelle inscription sur cette plateforme), les autres comptes du personnage continuent avec un canari quotidien pendant 7 j ; **2ᵉ `suspended` sur le même téléphone dans les 30 j, toute plateforme** → téléphone et IP en quarantaine 30 j, tous les comptes `disable`, profil supprimé, IP rendue jamais réaffectée, le personnage repart sur un nouveau profil et de nouveaux comptes (runbook §10) | `QUARANTINE_DAYS = 30` (informatif) | la quarantaine est un geste GeeLark/IPRoyal manuel (`infrastructure-geelark-proxies.md`) |
+| S6 | **Retraits Reddit par sub** : un post retiré = un strike sur le sub pour ce personnage ; 2 strikes sur un sub → sub retiré de sa liste (`publishing.md`), **sans** pause du compte ; un retrait d'un post qui contenait un lien (violation R22) ou un message de modération citant « ban »/« spam » → `action_blocked` (48 h) | rien | `farm_post_metrics.removed` (`metrics-attribution.md`) + compteur par sub dans la fiche persona côté OFMAI |
+| S7 | Premier `HTTP 429` sur une API X/Reddit → `action_blocked`, aucun réessai (incident @potter_society, R16) | rien (aucun chemin API) | `ledger.signal_api(account, kind, matched)` — même écriture que `FarmSession.signal`, sans session |
+| S8 | Un signal arrête la session en cours, sans réessai (R27) | `check_health` → `break` ; `WarmSessionAction.max_retries = 1` | `check_health` dans `post_video` (§1) |
 
 Définition d'un compte **rouge** pour S3 : une ligne `farm_signals` de `kind ∈ {action_blocked, verification, suspended, shadowban}` datant de moins de 48 h. `logged_out` est exclu (le plus souvent un appareil réinitialisé, pas la plateforme). Deux lignes du **même** compte ne comptent qu'une fois.
 
@@ -109,7 +109,7 @@ is_blocked(db, platform, now) -> bool            # cut ou now < paused_until
 
 `evaluate()` est appelée par `FarmSession.signal()` juste après l'écriture de `farm_signals` (même commit) ; `is_blocked()` par `planner.tick()` avant `due_slots()` et par le daemon `bridge` avant tout `GET /api/farm/queue` ou publication API. Côté OFMAI, le même calcul sur `FarmEvent` (`kind = health_signal`, 48 h) dans `lib/social/health.ts` pose `SocialAccount.pausedUntil` sur tous les comptes de la plateforme, que le fork recopie dans `farm_accounts.paused_until` (`bridge-ofmai-farm.md` §3.1, §5.2). Chaque côté applique le **plus strict** des deux : la plateforme s'arrête même quand le pont est tombé. Une pause S3 expire seule ; S4 ne se lève que par `platform resume`.
 
-Kill-switch par machine (R32, E5.3) : fichier `data/farm/STOP` sur le Mac mini, testé à chaque tick par `planner.tick` et `bridge.tick` (qui n'enfilent plus rien) ; `python -m gitd.farm.cli stop` le crée **puis** tue chaque job `running` par `POST /api/scheduler/queue/{qid}/kill` ; `start` retire le fichier. Test : `tests/test_farm_planner.py::test_stop_file_respected`.
+Kill-switch par machine (R31, E5.3) : fichier `data/farm/STOP` sur le Mac mini, testé à chaque tick par `planner.tick` et `bridge.tick` (qui n'enfilent plus rien) ; `python -m gitd.farm.cli stop` le crée **puis** tue chaque job `running` par `POST /api/scheduler/queue/{qid}/kill` ; `start` retire le fichier. Test : `tests/test_farm_planner.py::test_stop_file_respected`.
 
 ```bash
 python -m gitd.farm.cli platform pause tiktok --hours 48     # S3 à la main (à créer)
@@ -120,7 +120,7 @@ python -m gitd.farm.cli stop                                 # tout, tout de sui
 
 ## 5. Escalade humaine : Discord
 
-Nathan est en Thaïlande, le Mac mini à Paris : sans alerte, un compte en `verification_required` attend des jours (R33). Deux chemins, un par côté.
+Nathan est en Thaïlande, le Mac mini à Paris : sans alerte, un compte en `verification_required` attend des jours (R32). Deux chemins, un par côté.
 
 **OFMAI (existe)** : `sendDiscordAlert({ level: "warn" | "error" | "critical", title, message, route?, error? })` dans `lib/core/discord-alerts.ts` — embed coloré (orange / rouge / rouge foncé), champs Environment, Hostname, Timestamp, Route ; **no-op sans `DISCORD_WEBHOOK_URL`**, jamais bloquant. Aujourd'hui aucun appel social ; le handler de `POST /api/farm/events` (`bridge-ofmai-farm.md` §4) l'appelle à la réception :
 
@@ -128,7 +128,7 @@ Nathan est en Thaïlande, le Mac mini à Paris : sans alerte, un compte en `veri
 |---|---|---|
 | `health_signal` avec `new_health = cooldown` | `warn` | personne ; lecture au rapport du matin |
 | `health_signal` avec `new_health = shadowban_suspect` | `warn` | humain regarde le canari (§2) dans la journée |
-| `health_signal` avec `new_health ∈ {verification_required, logged_out}` | `error` | humain sur l'appareil **dans l'heure** (live stream Ghost, code SMS/email, R26) puis `clear-health` |
+| `health_signal` avec `new_health ∈ {verification_required, logged_out}` | `error` | humain sur l'appareil **dans l'heure** (live stream Ghost, code SMS/email, R25) puis `clear-health` |
 | `health_signal` avec `new_health = suspended` | `critical` | humain : `accounts disable`, quarantaine appareil + IP, vérifier S4 |
 | S3 déclenchée (pause plateforme) | `critical` | humain vérifie les deux comptes, décide de `platform resume` ou d'attendre |
 | S4 déclenchée (plateforme coupée) | `critical` | post-mortem daté avant toute reprise |
@@ -137,7 +137,7 @@ Nathan est en Thaïlande, le Mac mini à Paris : sans alerte, un compte en `veri
 ```ts
 await sendDiscordAlert({
   level: "error",
-  title: "Santé farm : instagram @eva.moore → verification_required",
+  title: "Santé farm : instagram @sierra.cole → verification_required",
   message: "matched « confirm it's you » · session 9c2d0b4e1a77 · phase_override light · un humain doit agir sur R58N1234",
   route: "farm/events",
 });
@@ -145,7 +145,7 @@ await sendDiscordAlert({
 
 **Fork (n'existe pas)** : `grep -rni discord gitd docs` ne trouve que l'étiquette d'app `"com.discord": "Discord"` dans `gitd/services/device_context.py`. Il faut `gitd/farm/alerts.py` (à créer) : `notify(level, title, message)` qui poste sur le webhook lu dans `FARM_DISCORD_WEBHOOK_URL`, sinon Trousseau macOS `security find-generic-password -s ofmai-discord-webhook -w` — exactement la résolution de `.claude/loop/notify.mjs` — texte brut tronqué à 1 900 caractères. Il sert **seulement** à ce qui ne transite pas par OFMAI : un checkpoint `awaiting_human` (`gitd/skills/checkpoint.py`, `set_state("awaiting_human", {reason, prompt, success, timeout_s})`, `DEFAULT_TIMEOUT_S = 600`), un `POST /api/farm/events` en 401 ou injoignable depuis plus de 15 min (`bridge-ofmai-farm.md` §7), un `stop`/`platform cut` lancé à la main. Les signaux santé eux-mêmes passent par OFMAI pour n'être alertés qu'une fois.
 
-Contenu d'un message d'alerte : plateforme, handle, nouvel état, `matched`, serial de l'appareil, action attendue. Jamais de nom de fournisseur, jamais d'identifiant (R10, R11). Le rapport quotidien (comptes par état, ligne « Humain ») est décrit dans `metrics-attribution.md` §6.
+Contenu d'un message d'alerte : plateforme, handle, nouvel état, `matched`, serial de l'appareil, action attendue. Jamais de nom de fournisseur, jamais d'identifiant (R9, R10). Le rapport quotidien (comptes par état, ligne « Humain ») est décrit dans `metrics-attribution.md` §6.
 
 ## 6. `accounts clear-health` : le geste humain
 
@@ -156,9 +156,9 @@ Code (`gitd/farm/cli.py`, `cmd_accounts`) : `acc.health = "ok"`, `acc.health_unt
 curl -s "http://127.0.0.1:5055/api/skills/runs?device=R58N1234&limit=5"     # dernier run, awaiting_human ?
 # 2. résoudre sur l'appareil : code SMS/email, « This was me », reconnexion — jamais un changement d'IP (S5)
 # 3. remettre le compte en état
-python -m gitd.farm.cli accounts clear-health instagram @eva.moore
+python -m gitd.farm.cli accounts clear-health instagram @sierra.cole
 # 4. vérifier la phase et le budget du jour avant la prochaine session
-python -m gitd.farm.cli budget instagram @eva.moore
+python -m gitd.farm.cli budget instagram @sierra.cole
 ```
 
 Quand **ne pas** effacer : après `suspended` (le compte est perdu : `accounts disable`, quarantaine S5) ; pendant un `shadowban_suspect` avant le 7ᵉ jour, sauf si le canari du jour montre le profil visible **et** des vues revenues au-dessus de 50 % de la référence ; après un `logged_out` sans avoir compris pourquoi (session expirée ≠ appareil réinitialisé ≠ mot de passe changé par la plateforme). Un `cooldown` expiré n'a pas besoin de `clear-health` pour reprendre, mais il en a besoin pour **retrouver sa phase naturelle** (`phase_override` conservé, §3).
@@ -189,6 +189,8 @@ Et pour le SSH : `python -m gitd.farm.cli health` (à créer) — une ligne par 
 - `clear-health --reason`, `kind = "cleared"`, endpoint REST.
 
 Tests attendus : fork `tests/test_farm_collective.py` (2 rouges → pause, 2 signaux du même compte → rien, 3 `suspended` → `cut`, `logged_out` ignoré, pause expirée → reprise, `cut` jamais levé seul), extension de `tests/test_farm_health.py` (motifs X/Reddit, `canary.decide()` sur les trois règles TikTok/IG, `zero_reach` branché), `tests/test_farm_planner.py` (`is_blocked` respecté, `test_stop_file_respected`), `tests/test_farm_alerts.py` (E2.1) ; OFMAI `lib/social/health.test.ts` (mêmes cas sur `FarmEvent`) et `app/api/farm/events/route.test.ts` (un `health_signal` `verification_required` déclenche un `sendDiscordAlert` de niveau `error`, un `cooldown` un `warn`, un `suspended` un `critical`). Lancement fork : `sh scripts/farm_tests.sh`.
+
+<!-- Numérotation : il n'y a pas de §9 (section retirée le 2026-09-14). Ne pas renuméroter la section ci-dessous : « health-canaries.md §10 » est cité tel quel par INDEX.md, account-creation.md, bridge-ofmai-farm.md et build-plan.md. -->
 
 ## 10. Retirer un compte banni (runbook)
 

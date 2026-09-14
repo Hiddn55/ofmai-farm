@@ -19,7 +19,7 @@
 | `network` | jours 8-14 | jours 14-23 | follows, premiers commentaires, premiers posts (3 par semaine) |
 | `cruise` | jour 15 et après | jour 24 et après | régime de croisière ; candidat à `api_mode` (§10) |
 
-Bornes du code : `d ≤ 3 + extra` → consume, `d ≤ 7 + 2·extra` → light, `d ≤ 14 + 3·extra` → network, sinon cruise (`test_phases_instagram_and_tiktok_offsets`). X et Reddit n'existent pas dans le fork (`add_account` refuse toute plateforme autre que `instagram` / `tiktok`) : ils suivent le calendrier Instagram (`extra = 0`) jusqu'à preuve du contraire, et ne chauffent que sur l'appareil, jamais par API (R17, incident @potter_society) [à vérifier lors de la création des skills `ofmai_x` / `ofmai_reddit`, `build-plan.md`]. Reddit suit ce calendrier pour la **chauffe**, mais son premier post est gouverné par `publishing.md` §5 (compte ≥ 31 jours **et** karma ≥ 100), pas par la phase : le cap `posts_per_week = 3` de `network` n'y autorise rien.
+Bornes du code : `d ≤ 3 + extra` → consume, `d ≤ 7 + 2·extra` → light, `d ≤ 14 + 3·extra` → network, sinon cruise (`test_phases_instagram_and_tiktok_offsets`). X et Reddit n'existent pas dans le fork (`add_account` refuse toute plateforme autre que `instagram` / `tiktok`) : ils suivent le calendrier Instagram (`extra = 0`) jusqu'à preuve du contraire, et ne chauffent que sur l'appareil, jamais par API (R16, incident @potter_society) [à vérifier lors de la création des skills `ofmai_x` / `ofmai_reddit`, `build-plan.md`]. Reddit suit ce calendrier pour la **chauffe**, mais son premier post est gouverné par `publishing.md` §5 (compte ≥ 31 jours **et** karma ≥ 100), pas par la phase : le cap `posts_per_week = 3` de `network` n'y autorise rien.
 
 ## 2. Caps par action et par phase
 
@@ -48,8 +48,8 @@ Caps fixés hors tirage (`DailyBudget.build`) : `POST` = 1 par jour dès que `po
 Chaque matin du compte, `DailyBudget.build(account_key, platform, created_on, day)` tire pour chaque action `floor(cap × U(0,4 ; 1,0))` avec un `random.Random` seedé par `sha256("budget|<platform>:<id>|<AAAA-MM-JJ>")` (`account_key` = `ledger.account_key`, ex. `instagram:3`). Même compte, même date → même budget : rejouer la journée ne donne jamais plus (`test_budget_is_deterministic_and_between_40_and_100_percent_of_caps`). Exemple en cruise : `likes` 80 → entre 32 et 80 ; `comments` 8 → entre 3 et 8. Les minutes et le nombre de sessions sont tirés uniformément dans les plages du §2.
 
 ```bash
-python -m gitd.farm.cli budget instagram @eva.moore --date 2026-09-20
-# @eva.moore instagram — 2026-09-20 — day 20, phase cruise
+python -m gitd.farm.cli budget instagram @sierra.cole --date 2026-09-20
+# @sierra.cole instagram — 2026-09-20 — day 20, phase cruise
 # sessions: 3 for 47 min total
 #   like            12 /  58
 #   save             2 /   9
@@ -62,7 +62,7 @@ python -m gitd.farm.cli budget instagram @eva.moore --date 2026-09-20
 #   views           96
 ```
 
-Le budget vit dans le ledger, pas dans un prompt (R14) : `FarmSession.record()` écrit une ligne `farm_actions` par action, `spent_on()` les recompte à chaque ouverture de session.
+Le budget vit dans le ledger, pas dans un prompt (R13) : `FarmSession.record()` écrit une ligne `farm_actions` par action, `spent_on()` les recompte à chaque ouverture de session.
 
 ## 5. Sessions : nombre, durée, fenêtres dérivantes, heures calmes
 
@@ -72,12 +72,12 @@ Le budget vit dans le ledger, pas dans un prompt (R14) : `FarmSession.record()` 
 - **Fenêtres** : `_WINDOWS = [(8, 12), (12, 15), (18, 23), (15, 18)]`, prises dans cet ordre (2 sessions = matin + midi ; 3 = + soir ; 4 = + après-midi), puis un départ uniforme dans la fenêtre **décalé de −90 à +90 min**, borné à 07:05-23:40. Aucune journée ne ressemble à la veille (`test_sessions_avoid_quiet_hours_and_vary_by_day` : plus de 15 heures de départ distinctes sur 26 jours).
 - **Durées** : les minutes du jour sont réparties par poids log-normaux (σ = 0,5) ; 10 % des sessions deviennent un « coup d'œil » de 1-2 min.
 - **Espacement** : au moins 45 min entre la fin d'une session et le début de la suivante (+0 à 30 min tirés) ; une session repoussée après minuit est supprimée.
-- **Heures calmes** : `QUIET_HOURS = range(1, 7)` → rien entre 01:00 et 06:59 locale, ni session, ni post, ni bascule de proxy (R16, R20). Un départ tombant dedans est ramené à 07:05-07:55.
+- **Heures calmes** : `QUIET_HOURS = range(1, 7)` → rien entre 01:00 et 06:59 locale, ni session, ni post, ni bascule de proxy (R15, R19). Un départ tombant dedans est ramené à 07:05-07:55.
 
 Le planner (`python -m gitd.farm.cli daemon`, `planner.tick` chaque 60 s) enfile un job Ghost `skill_workflow` (`priority = 2`, `trigger = "farm"`, `max_duration_s = (minutes + GRACE_MINUTES 10) × 60`) quand `start ≤ now ≤ start + LATE_TOLERANCE_MINUTES (20)` ; un créneau plus vieux est **sauté, jamais rattrapé** (rattraper a l'air robotique). Un créneau = une clé `farm_planned.slot_key = "<account_id>:<start>"`, donc un redémarrage ne double jamais une session. Le scheduler Ghost tient un seul job actif par téléphone et tue le job au-delà de `max_duration_s` (SIGTERM puis SIGKILL). `WarmSessionAction` reçoit `minutes` du créneau ; à 0 (lancement manuel `run`), il prend `session_minutes / sessions`.
 
 ```bash
-python -m gitd.farm.cli plan tiktok @eva.moore --date 2026-09-22
+python -m gitd.farm.cli plan tiktok @sierra.cole --date 2026-09-22
 # 09:47   19 min
 # 13:58    2 min
 # 20:31   26 min
@@ -85,7 +85,7 @@ python -m gitd.farm.cli plan tiktok @eva.moore --date 2026-09-22
 
 ## 6. Jour de repos
 
-Un jour par semaine ISO, choisi par `sha256("rest|<account_key>|<année, semaine>")`, jamais pendant les trois premiers jours de vie (`rest_day = weekday == rest_weekday and dol > 3`). Ce jour-là : tous les caps à 0, 0 minute, 0 session, `plan` répond `no session (rest day)`, `WarmSessionAction` répond `{"skipped": "rest day", "day_of_life": …}` et `allow()` refuse tout (R18). Décision : une publication par API (§10) respecte aussi le jour de repos — le workflow de publication lit `budget_for()` avant de poster [à coder, `build-plan.md`].
+Un jour par semaine ISO, choisi par `sha256("rest|<account_key>|<année, semaine>")`, jamais pendant les trois premiers jours de vie (`rest_day = weekday == rest_weekday and dol > 3`). Ce jour-là : tous les caps à 0, 0 minute, 0 session, `plan` répond `no session (rest day)`, `WarmSessionAction` répond `{"skipped": "rest day", "day_of_life": …}` et `allow()` refuse tout (R17). Décision : une publication par API (§10) respecte aussi le jour de repos — le workflow de publication lit `budget_for()` avant de poster [à coder, `build-plan.md`].
 
 ## 7. Ce que fait une session (`warm.py`)
 
@@ -96,8 +96,8 @@ Un jour par semaine ISO, choisi par `sha256("rest|<account_key>|<année, semaine
 3. **Liker** : propension de la phase × `allow(LIKE)` ; les deux skills double-tapent la vidéo 6 fois sur 10, sinon le bouton « Like » ; jamais de dé-like (« Liked » / « Unlike » présent → rien).
 4. **Enregistrer** : Instagram « More options » → « Save » ; TikTok « Favorites ».
 5. **Visiter le profil de l'auteur** (`open_author`), lire la bio (`pause(2.5)`), nouveau contrôle santé, **follow** seulement ici et seulement si `allow(FOLLOW)` ; retour au feed.
-6. **Commenter** : un texte tiré au hasard du pool (`comments.pop(...)`, jamais deux fois le même dans la session), pause « réflexion » `1.5`, saisie caractère par caractère (ASCII pur, R13), contrôle santé après. Sans pool, la branche n'existe pas.
-7. **Détour** toutes les `DETOUR_EVERY = (12, 30)` vidéos : `search` (Instagram : onglet Search, `#<niche>`, Entrée, 1-3 défilements de 1,5-4 s ; TikTok : loupe, requête sans `#`) compte un `search` ; `stories` (Instagram seulement : Home, une story qui n'est pas « Your story », 2-6 taps de 2-6 s) compte un `story_view`. La requête vient de `niche` (`farm_accounts.niche`, ex. `fitness,ootd,gymgirl`).
+6. **Commenter** : un texte tiré au hasard du pool (`comments.pop(...)`, jamais deux fois le même dans la session), pause « réflexion » `1.5`, saisie caractère par caractère (ASCII pur, R12), contrôle santé après. Sans pool, la branche n'existe pas.
+7. **Détour** toutes les `DETOUR_EVERY = (12, 30)` vidéos : `search` (Instagram : onglet Search, `#<niche>`, Entrée, 1-3 défilements de 1,5-4 s ; TikTok : loupe, requête sans `#`) compte un `search` ; `stories` (Instagram seulement : Home, une story qui n'est pas « Your story », 2-6 taps de 2-6 s) compte un `story_view`. La requête vient de `niche` (`farm_accounts.niche` = `hashtags_niche` de la fiche, ex. `gymgirl,fitnessmotivation,losangeles,morningroutine` pour `sierra`).
 8. **Poser le téléphone** : `PHONE_DOWN_RATE = 0.03` par vidéo, `PHONE_DOWN_S = (20.0, 90.0)` secondes sans rien faire.
 9. **Vidéo suivante** : swipe vertical avec dérive latérale, amplitude 40-68 % de l'écran, 150-1 200 ms — jamais un `input tap` nu (`test_instagram_warm_session_runs_against_fake_device`).
 
@@ -110,14 +110,14 @@ Propensions par phase (`PROPENSITY`, avant le oui/non du ledger) :
 | `network` | 0,11 | 0,04 | 0,07 | 0,35 | 0,04 |
 | `cruise` | 0,12 | 0,04 | 0,08 | 0,30 | 0,05 |
 
-**X et Reddit (skills à créer, E3.1)** — le `PlatformAdapter` de `warm.py` est écrit pour un feed vidéo ; sur ces deux apps, l'unité de `VIEW` est une **carte de post** du fil `For you` (X) / `Home` (Reddit), `watch()` inchangé ; `like` = cœur (X) / upvote (Reddit, sous le cap `likes`, jamais hors chauffe : manipulation de votes) ; `save` = signet (X) / « Save » (Reddit) ; `open_author` = profil de l'auteur (X) / profil de l'auteur, jamais le sub (Reddit) ; `follow` = Follow (X) / « Join » du sub du post (Reddit), sous le cap `follows` et seulement dans la branche `open_author` (R17) ; `comment` = pool ASCII, jamais sur X avant `network` ; détours : `search` uniquement (`#<niche>` sur X, `r/<niche>` puis onglet `Hot` sur Reddit), pas de `stories` ; santé : motifs `_PATTERNS["x"]` / `["reddit"]` d'E3.1.
+**X et Reddit (skills à créer, E3.1)** — le `PlatformAdapter` de `warm.py` est écrit pour un feed vidéo ; sur ces deux apps, l'unité de `VIEW` est une **carte de post** du fil `For you` (X) / `Home` (Reddit), `watch()` inchangé ; `like` = cœur (X) / upvote (Reddit, sous le cap `likes`, jamais hors chauffe : manipulation de votes) ; `save` = signet (X) / « Save » (Reddit) ; `open_author` = profil de l'auteur (X) / profil de l'auteur, jamais le sub (Reddit) ; `follow` = Follow (X) / « Join » du sub du post (Reddit), sous le cap `follows` et seulement dans la branche `open_author` (R16) ; `comment` = pool ASCII, jamais sur X avant `network` ; détours : `search` uniquement (`#<niche>` sur X, `r/<niche>` puis onglet `Hot` sur Reddit), pas de `stories` ; santé : motifs `_PATTERNS["x"]` / `["reddit"]` d'E3.1.
 
 **Ce qui met fin à une session** : le temps écoulé (`deadline`) ; un signal santé (`stats.health`, `success = False`, `error = "health signal: …"`) ; `feed not reachable` à l'ouverture ; `lost the feed` ; une exception (`stats.error`, la session rend quand même ses compteurs) ; le timeout du scheduler ; un `POST /api/scheduler/queue/<qid>/kill` humain. Chaque session finit par une ligne `Data:` reprise dans l'onglet Scheduler de Ghost :
 
 ```json
 {"videos": 118, "likes": 9, "saves": 2, "visits": 6, "follows": 2, "comments": 1, "detours": 4,
  "seconds": 1462.3, "health": null, "error": null,
- "handle": "eva.moore", "day_of_life": 20, "phase": "cruise", "profile_seed": 733120544}
+ "handle": "sierra.cole", "day_of_life": 20, "phase": "cruise", "profile_seed": 733120544}
 ```
 
 ## 8. Pools de commentaires par persona
@@ -127,24 +127,24 @@ Le code attend `params.comments` (ASCII, un par ligne, `WarmSessionAction`), mai
 Règles d'un commentaire :
 
 - ASCII pur, 2 à 8 mots, minuscules acceptées, pas d'emoji (`type_text` les supprime), pas de lien, pas de `@`, pas de `#`, pas de prix ni de « free ».
-- Réagit au **visuel** (lumière, lieu, tenue, geste), jamais au corps de l'autre, jamais une question sur « real » ; aucune mention d'OFMAI ni d'IA sur le contenu des autres (un commentaire promotionnel est du spam, R23) ; aucun nom de fournisseur, jamais « same face » (R11, R12).
+- Réagit au **visuel** (lumière, lieu, tenue, geste), jamais au corps de l'autre, jamais une question sur « real » ; aucune mention d'OFMAI ni d'IA sur le contenu des autres (un commentaire promotionnel est du spam, R22) ; aucun nom de fournisseur, jamais « same face » (R10, R11).
 - Écrit dans la voix de la fiche persona (`personas.md`) par l'agent du workflow quotidien, passé par l'étage 1 de conformité (`content-pipeline.md` §8), puis inséré dans `SocialCommentPool`.
 - Stock : ≥ 60 textes disponibles par personnage et par plateforme ; réapprovisionné dès que le stock passe sous 20 ; un texte n'est jamais réutilisé sur le même compte à moins de 30 jours (`usedAt`) ; réservation 24 h à la livraison, rendue si non consommée.
 - Consommation réelle : `comments` 3/jour en network, 8/jour en cruise avant tirage (§2), propension 0,04-0,05 par vidéo : une session de 25 min en pose 0 à 2.
 
-Exemple pour Eva (chic méditerranéen, assurée, sobre ; niche `fitness,ootd`) :
+Exemple pour Sierra (fitness : upbeat, précise, encourageante, jamais moralisatrice ; niche `gymgirl,fitnessmotivation,losangeles,morningroutine`) — les quatre premières lignes sont l'amorce `comment_pools.instagram` de sa fiche (`personas.md` §2) :
 
 ```text
-this light is unreal
-ok the earrings
-need this whole outfit
-summer in one frame
-the hair tho
-effortless as always
-where is this??
-that palette is everything
-form check: perfect
-golden hour did its job
+that form though
+ok the lighting in this gym
+need this playlist asap
+saved for tomorrow's session
+the 6am club is real
+this warmup looks brutal
+adding this to leg day
+that gym is spotless
+the tempo on those reps
+rest day earned after this
 ```
 
 ## 9. Santé : machine d'états et effets sur la phase
@@ -155,22 +155,22 @@ golden hour did its job
 |---|---|---|---|---|
 | `ok` | — | — | aucun (ou celui hérité) | — |
 | `cooldown` | `action_blocked` : « action blocked », « try again later », « we limit how often », « tapping too fast », « too many attempts »… | `COOLDOWN_HOURS = 48` | la phase **précédant** la phase naturelle (cruise → network, network → light, light → consume) | automatique à l'échéance ; l'override reste |
-| `verification_required` | `verification` : « confirm it's you », « suspicious login », « verify to continue », « drag the slider », « enter the confirmation code »… | illimitée | inchangé | un humain agit sur l'appareil (checkpoint, R26), puis `clear-health` |
+| `verification_required` | `verification` : « confirm it's you », « suspicious login », « verify to continue », « drag the slider », « enter the confirmation code »… | illimitée | inchangé | un humain agit sur l'appareil (checkpoint, R25), puis `clear-health` |
 | `shadowban_suspect` | `shadowban` : émis par l'analytique, jamais par l'écran ; `zero_reach(view_counts)` = les 3 derniers posts à ≤ 2 vues, **appelé nulle part aujourd'hui** (`health-canaries.md`) | `SHADOWBAN_DAYS = 7` | `consume` (regarder seulement, aucun post) | automatique ; l'override reste |
 | `logged_out` | `logged_out` : « log in », « create new account », « sign up for tiktok » | illimitée | inchangé | un humain (« never auto-login »), puis `clear-health` |
-| `suspended` | `suspended` : « your account has been suspended », « we banned your account », « community guidelines violation »… | `QUARANTINE_DAYS = 30` | aucun | jamais (`can_run` = False) ; appareil et IP en quarantaine 30 jours (R19) |
+| `suspended` | `suspended` : « your account has been suspended », « we banned your account », « community guidelines violation »… | `QUARANTINE_DAYS = 30` | aucun | jamais (`can_run` = False) ; appareil et IP en quarantaine 30 jours (R18) |
 
 Effets :
 
-- Le signal **arrête la session** (R28) et `planner.tick` ne planifie plus rien tant que `HealthState.can_run(now)` est faux ; `open_session()` lève `PermissionError("@… is cooldown until …")` ou `"… — a human must act on the device"`, y compris pour un `run` manuel.
+- Le signal **arrête la session** (R27) et `planner.tick` ne planifie plus rien tant que `HealthState.can_run(now)` est faux ; `open_session()` lève `PermissionError("@… is cooldown until …")` ou `"… — a human must act on the device"`, y compris pour un `run` manuel.
 - `effective_phase = min(phase naturelle, phase_override)` ; `ledger.budget_for()` reconstruit le budget avec les **caps de la phase forcée**, même seed, vrai `day_of_life` (`test_signal_puts_account_in_cooldown_and_blocks_next_session`).
-- `cooldown` et `shadowban_suspect` expirés → `health = ok` à la session suivante, mais `phase_override` reste jusqu'à `accounts clear-health` (geste humain, R27). Un compte sorti de cooldown rechauffe donc une phase en dessous tant que personne n'a regardé l'écran.
-- Deux comptes rouges en 48 h sur une plateforme → pause de la plateforme ; trois `suspended` en 48 h → plateforme coupée : règles collectives **hors code** (`health-canaries.md`, R30, R31).
+- `cooldown` et `shadowban_suspect` expirés → `health = ok` à la session suivante, mais `phase_override` reste jusqu'à `accounts clear-health` (geste humain, R26). Un compte sorti de cooldown rechauffe donc une phase en dessous tant que personne n'a regardé l'écran.
+- Deux comptes rouges en 48 h sur une plateforme → pause de la plateforme ; trois `suspended` en 48 h → plateforme coupée : règles collectives **hors code** (`health-canaries.md`, R29, R30).
 
 ```bash
 python -m gitd.farm.cli accounts list                                # day, phase, health=…, [disabled], [api]
-python -m gitd.farm.cli accounts clear-health instagram @eva.moore   # ok, health_until NULL, phase_override NULL
-python -m gitd.farm.cli accounts disable tiktok @eva.moore           # pause manuelle
+python -m gitd.farm.cli accounts clear-health instagram @sierra.cole   # ok, health_until NULL, phase_override NULL
+python -m gitd.farm.cli accounts disable tiktok @sierra.cole           # pause manuelle
 ```
 
 ## 10. Passage en `api_mode`
@@ -180,13 +180,13 @@ Deux notions à ne pas confondre : `channel` (`bridge-ofmai-farm.md` §3.2) dit 
 | Plateforme | Chauffe sur l'appareil | Premiers posts (`network`, 3 / semaine) | Posts en `cruise` | `api_mode` |
 |---|---|---|---|---|
 | Instagram | oui, toute la vie du compte | `post_video` (Reel depuis la galerie) | `post_video`, 1 / jour, 7 / semaine (+ 1 story, E3.4) | **jamais** (API Graph exclue) |
-| TikTok | oui | `post_video`, toggle « AI-generated content » confirmé (R4) | API Content Posting via le MCP Higgsfield (`tiktok_connect`, `tiktok_prepare_publish`, `tiktok_publish`, 13 posts / jour côté API, notre cap §11) | `PATCH … {"apiMode": true}` au passage en cruise, après la checklist §13 |
-| X | oui (skill à créer) | API officielle depuis le Mac mini, par l'IP statique du personnage (R22) | idem, cap §11 | idem au passage en cruise |
-| Reddit | oui (skill à créer) | `post_video` jamais ; publication API seulement à `day_of_life ≥ 31` **et** karma ≥ 100 (relevé par `metrics_pull` / écran profil), condition posée dans `publish-api.ts` et dans `GET /api/farm/queue` (aucune publication Reddit servie avant) — le cap `posts_per_week` du ledger ne suffit pas ; zéro lien dans le post (R23) | idem, cap §11 | idem au passage en cruise |
+| TikTok | oui | `post_video` ; toggle « AI-generated content » posé et confirmé seulement si `params.aigc_label` est vrai (personnage `declared`), jamais touché pour un `undeclared` (R2, R3) | API Content Posting via le MCP Higgsfield (`tiktok_connect`, `tiktok_prepare_publish`, `tiktok_publish`, 13 posts / jour côté API, notre cap §11) | `PATCH … {"apiMode": true}` au passage en cruise, après la checklist §13 |
+| X | oui (skill à créer) | API officielle depuis le Mac mini, par l'IP statique du personnage (R21) | idem, cap §11 | idem au passage en cruise |
+| Reddit | oui (skill à créer) | `post_video` jamais ; publication API seulement à `day_of_life ≥ 31` **et** karma ≥ 100 (relevé par `metrics_pull` / écran profil), condition posée dans `publish-api.ts` et dans `GET /api/farm/queue` (aucune publication Reddit servie avant) — le cap `posts_per_week` du ledger ne suffit pas ; zéro lien dans le post (R22) | idem, cap §11 | idem au passage en cruise |
 
 Ce qui change **aujourd'hui dans le code** quand `api_mode = 1` : `planner.tick` saute le compte (`if acc.api_mode: continue`) — plus aucune session ; `accounts list` affiche `[api]` ; `post_video` n'est plus enfilé ; la publication par API est décrite dans `publishing.md`. Aucune publication par API n'existe encore, ni le routage par l'IP statique.
 
-Ce que la décision du brief exige (« l'appareil ne fait plus que de la consommation légère ») et que le code doit apprendre (`build-plan.md`) : en `api_mode`, le planner continue à planifier des sessions avec les caps ci-dessous, et la publication API appelle `open_session().allow(POST)` / `record(POST)` comme le fait `PostReelAction`, pour que le quota reste dans le ledger (R14).
+Ce que la décision du brief exige (« l'appareil ne fait plus que de la consommation légère ») et que le code doit apprendre (`build-plan.md`) : en `api_mode`, le planner continue à planifier des sessions avec les caps ci-dessous, et la publication API appelle `open_session().allow(POST)` / `record(POST)` comme le fait `PostReelAction`, pour que le quota reste dans le ledger (R13).
 
 | Régime | likes | saves | follows | comments | posts appareil | story_views | profile_visits | searches | minutes / jour | sessions / jour |
 |---|---|---|---|---|---|---|---|---|---|---|
@@ -196,7 +196,7 @@ Soit les caps `light` sans follow ni commentaire ; `COMMENT_REPLY` et `DM_REPLY`
 
 ## 11. Arbitrage : 1 post / jour sur l'appareil contre 6 assets / jour / personnage
 
-`policy.py` plafonne l'appareil à `POST = 1` / jour et `posts_per_week` 3 (network) / 7 (cruise) ; le brief vise 6 assets / jour / personnage et le plan ×10 « 2-4 posts / jour / compte ». Les trois sont compatibles parce qu'un asset n'est pas un post (un clip re-rendu sert plusieurs plateformes, `content-pipeline.md` §6 et §9 : 16 variantes prêtes par jour) et parce que le volume passe par l'API, jamais par l'appareil :
+`policy.py` plafonne l'appareil à `POST = 1` / jour et `posts_per_week` 3 (network) / 7 (cruise) ; le brief vise 6 assets / jour / personnage et le plan ×10 « 2-4 posts / jour / compte ». Les trois sont compatibles parce qu'un asset n'est pas un post (un master gardé est re-rendu en plusieurs variantes qui servent plusieurs plateformes, `content-pipeline.md` §6 et §9 : **8 variantes prêtes par jour** depuis 3 masters gardés) et parce que le volume passe par l'API, jamais par l'appareil :
 
 | Compte | Canal en cruise | Cap / jour (décision) | Cap / semaine |
 |---|---|---|---|
@@ -205,7 +205,7 @@ Soit les caps `light` sans follow ni commentaire ; `COMMENT_REPLY` et `DM_REPLY`
 | X | API | 3, puis 2 si < 500 impressions / post après 100 posts, 1 à J7 (`metrics-attribution.md` §7) | 21 |
 | Reddit | API | 2, sur deux subs différents | 14 |
 
-Total par personnage en cruise : jusqu'à 8 posts / jour (+ 1 story Instagram sur l'appareil, E3.4), depuis ≈ 4 assets gardés (`content-pipeline.md` §9). Le cap API se tient dans le ledger via une table par **plateforme** dans `policy.py` — `API_POSTS_PER_DAY = {"tiktok": 2, "x": 3, "reddit": 2}`, 0 hors cruise, posée par `DailyBudget.build` dans `caps[API_POST]` (un cap par phase dans `PhaseCaps` ne peut pas porter des valeurs par plateforme) — et une action `API_POST` distincte de `POST` [à coder, E8.3]. Règles communes aux deux canaux : jamais en heures calmes, jamais le jour de repos, au moins 3 h entre deux posts d'un même compte (appliqué par `POST /api/admin/social/queue`, E6.6), et 3 ou 4 posts / jour seulement après que les seuils J7 tiennent — **jamais sur l'appareil**, dont les chiffres ne bougent pas (R15).
+Total par personnage en cruise : jusqu'à 8 posts / jour (+ 1 story Instagram sur l'appareil, E3.4), soit **8 variantes tirées de 3 masters gardés** (1 vidéo + 2 images, ≈ 4 réplications ; la story reprend une variante image) ; les « 6 assets / jour / personnage » du brief sont un **plafond de production**, pas une cible (`content-pipeline.md` §9). Le cap API se tient dans le ledger via une table par **plateforme** dans `policy.py` — `API_POSTS_PER_DAY = {"tiktok": 2, "x": 3, "reddit": 2}`, 0 hors cruise, posée par `DailyBudget.build` dans `caps[API_POST]` (un cap par phase dans `PhaseCaps` ne peut pas porter des valeurs par plateforme) — et une action `API_POST` distincte de `POST` [à coder, E8.3]. Règles communes aux deux canaux : jamais en heures calmes, jamais le jour de repos, au moins 3 h entre deux posts d'un même compte (appliqué par `POST /api/admin/social/queue`, E6.6), et 3 ou 4 posts / jour seulement après que les seuils J7 tiennent — **jamais sur l'appareil**, dont les chiffres ne bougent pas (R14).
 
 ## 12. Exemples de journée par phase
 
@@ -215,7 +215,7 @@ Chiffres illustratifs, tirés dans les plages du code ; les vrais dépendent du 
 
 **Instagram, jour 6 (`light`)** — `likes` 25 → 17, `saves` 6 → 3, `follows` 3 → 2, `story_view` 30 → 19, `profile_visit` 8 → 5, `search` 3 → 2 ; 3 sessions, 41 min : `08:31 2 min` (coup d'œil), `13:05 24 min`, `21:40 15 min`. Sur 150 vues, 9-14 likes (ratio 15 % jamais dépassé), 1 follow après la 4e visite de profil, aucun commentaire (propension 0).
 
-**TikTok, jour 16 (`network`)** — `likes` 50 → 33, `saves` 10 → 6, `follows` 12 → 7, `comments` 3 → 2, `post` 1 (si moins de 3 cette semaine), `profile_visit` 20 → 13, `search` 4 → 3 ; 3 sessions, 50 min. Un `post_video` à 12:40 (légende ASCII, toggle AIGC), 2 commentaires du pool posés dans l'après-midi, détours par recherche uniquement.
+**TikTok, jour 16 (`network`)** — `likes` 50 → 33, `saves` 10 → 6, `follows` 12 → 7, `comments` 3 → 2, `post` 1 (si moins de 3 cette semaine), `profile_visit` 20 → 13, `search` 4 → 3 ; 3 sessions, 50 min. Un `post_video` à 12:40 (légende ASCII, toggle AIGC selon `params.aigc_label` de l'item de file), 2 commentaires du pool posés dans l'après-midi, détours par recherche uniquement.
 
 **Instagram, jour 20 (`cruise`)** — `likes` 80 → 58, `saves` 15 → 9, `follows` 15 → 11, `comments` 8 → 5, `post` 1, `story_view` 60 → 41, `profile_visit` 30 → 19, `search` 5 → 4 ; 4 sessions, 55 min entre 07:50 et 23:10 ; un Reel posté sur l'appareil dans la fenêtre de midi.
 
@@ -234,10 +234,10 @@ sqlite3 data/gitd.db "select kind, matched, at from farm_signals where account_i
 ```
 
 - [ ] Au moins 3 posts publiés sur l'appareil pendant `network`, aucun retiré, chacun visible depuis le profil observateur déconnecté (`health-canaries.md`).
-- [ ] Profil complet : mention « AI » en bio, link-in-bio avec les UTM du personnage (`personas.md`, `metrics-attribution.md`), aucun lien hotofmai.ai sur Instagram / TikTok (R24).
-- [ ] `tested_on` non vide dans `skill.yaml` du skill du compte (R35) et deux sessions consécutives sans `error` à 0 vidéo.
-- [ ] Pool de commentaires ≥ 60 textes disponibles pour ce personnage et cette plateforme (§8), stock de variantes `ready` ≥ 3 jours (`content-pipeline.md` §9).
-- [ ] TikTok seulement : OAuth (`tiktok_connect`) réalisé depuis le téléphone du personnage [à vérifier], premier post API publié avec le paramètre AIGC et relu à 24 h depuis l'observateur, puis `PATCH /api/admin/social/accounts/{id} {"apiMode": true}` (E7.2) — recopié dans `farm_accounts.api_mode` par le pont ; `accounts api-mode` seulement si le pont est arrêté.
-- [ ] Discord reçoit les alertes (`DISCORD_WEBHOOK_URL`) et quelqu'un peut atteindre l'appareil dans l'heure (R33).
+- [ ] Profil complet : bio de la fiche persona pour cette plateforme — mention « AI » pour un personnage `declared` (`disclosed: true`), **aucune** mention pour un `undeclared` ; sur Fanvue les six sont déclarés quoi qu'il arrive (`personas.md` §4) —, link-in-bio avec les UTM du personnage (`personas.md`, `metrics-attribution.md`), aucun lien hotofmai.ai sur Instagram / TikTok (R23).
+- [ ] `tested_on` non vide dans `skill.yaml` du skill du compte (R34) et deux sessions consécutives sans `error` à 0 vidéo.
+- [ ] Pool de commentaires ≥ 60 textes disponibles pour ce personnage et cette plateforme (§8), stock de variantes `ready` au niveau de sécurité du §9 de `content-pipeline.md` (3 × le cap de §11 : Instagram 3, TikTok 6, X 9, Reddit 6).
+- [ ] TikTok seulement : OAuth (`tiktok_connect`) réalisé depuis le téléphone du personnage [à vérifier], premier post API publié avec `is_aigc` (`tiktok_prepare_publish`) = `aigc_label` de l'item de file, soit `true` pour un `declared` et `false` pour un `undeclared`, et relu à 24 h depuis l'observateur, puis `PATCH /api/admin/social/accounts/{id} {"apiMode": true}` (E7.2) — recopié dans `farm_accounts.api_mode` par le pont ; `accounts api-mode` seulement si le pont est arrêté.
+- [ ] Discord reçoit les alertes (`DISCORD_WEBHOOK_URL`) et quelqu'un peut atteindre l'appareil dans l'heure (R32).
 
 Un point non coché = le compte reste en cruise sur l'appareil, aux caps du §2 ; on ne force rien.

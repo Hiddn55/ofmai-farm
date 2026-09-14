@@ -12,6 +12,7 @@ Vue d'ensemble des composants : `architecture.md`. Chiffres de chauffe : `warmin
 
 - **La ferme tire, OFMAI ne pousse jamais.** Le Mac mini de Paris n'a pas d'entrée publique ; tout appel HTTP part du Mac mini vers OFMAI. Les endpoints FastAPI du fork (port 5055, `gitd/config.py`) ne servent qu'aux humains et aux workflows qui tournent sur le Mac mini, via SSH. Le serveur du fork est FastAPI, pas Flask (`docs/features/scheduler.md` est périmé sur ce point).
 - **OFMAI est la source de vérité** des personnages, des assets (clés S3, jamais d'URL en base, invariant 3 de `CLAUDE.md`), des légendes, des pools de commentaires et des publications planifiées. Le fork est la source de vérité du ledger (`farm_actions`, `farm_signals`) et de la santé instantanée d'un compte.
+- **La ferme ne génère rien et n'écrit rien.** Tout média vient de la banque `ContentAsset` d'OFMAI (une réplication par post du radar, contrôlée par Gemini avant la mise en file, `content-pipeline.md`) ; toute légende est celle figée sur la variante par le workflow de contenu. Le contrat ne transporte donc ni prompt, ni moteur, ni paramètre de relance de rendu : le `retry` du fork (§6, §7) rejoue une **publication**, jamais un rendu. Chaque asset porte `source_post_id` (le `ScrapedPost.id` répliqué, `ContentAsset.sourcePostId`, unique par personnage) et chaque personnage porte `disclosed` (groupe de divulgation IA, décision C5 du brief : groupe `declared` = `sierra`, `camila`, `hana` ; groupe `undeclared` = `skyler`, `riley`, `vera`, sur Instagram, TikTok, X et Reddit ; Fanvue est hors pont, les six y sont déclarés). Chaque publication porte `aigc_label`, figé à la mise en file sur `SocialPublication.aigcLabel` : c'est lui, et jamais la fiche persona relue au moment du post, qui commande le toggle AIGC sur l'appareil et `is_aigc` en `api_mode`.
 - **Rien n'est perdu si un côté tombe** : côté OFMAI, une publication reste `queued` tant qu'elle n'a pas été réclamée ; côté fork, tout événement sortant est écrit dans une boîte d'envoi locale avant d'être envoyé.
 - **Deux clés d'idempotence** : `(variantId, socialAccountId)` unique pour une publication (jamais deux fois la même variante sur le même compte ; un master rendu pour quatre plateformes donne quatre variantes, donc quatre publications), `eventId` unique pour un événement retour.
 - Le contrat ne transporte jamais de nom de fournisseur ni d'identifiant proxy/GeeLark : ces données restent dans `infrastructure-geelark-proxies.md` et la config locale du Mac mini.
@@ -34,26 +35,29 @@ Toutes en `withLogging("farm-<nom>", handler)` (`lib/core/with-logging.ts`), ré
 Liste des comptes sociaux attendus par personnage, pour que `python -m gitd.farm.cli accounts add` et le planner restent alignés sur OFMAI.
 
 ```json
-{"accounts":[{"id":"sa_01","character_id":"cmf…","platform":"instagram","handle":"eva.moore",
-  "role":"persona","market":"US","timezone":"America/New_York","content_type":"sfw",
+{"accounts":[{"id":"sa_01","character_id":"cmf…","platform":"instagram","handle":"sierra.cole",
+  "role":"persona","market":"US","timezone":"America/Los_Angeles","content_type":"sfw",
+  "disclosed":true,"disclosed_since":null,
   "niche":"fitness,ootd,gymgirl","api_mode":false,"paused_until":null,"link_in_bio":"https://…"}]}
 ```
 
-`role` ∈ `persona | brand | observer` ; `paused_until` porte le kill-switch de plateforme décidé côté OFMAI (`health-canaries.md`). Le fork copie `paused_until` dans `farm_accounts` (colonne à ajouter, §5.2) et `planner.tick` saute le compte tant que `now < paused_until`, en plus du test `health_state(acc).can_run(now)` déjà présent. Un compte `role = observer` est renvoyé pour la lecture seule et **jamais recopié dans `farm_accounts`** (`ledger.add_account()` le chaufferait ; son serial vit dans `FARM_OBSERVER_DEVICE`, `health-canaries.md` §2) ; un `role = brand` peut y entrer avec `enabled = 0` (E1.1), jamais planifié. `api_mode` est la source de vérité côté OFMAI (`SocialAccount.apiMode`, `PATCH /api/admin/social/accounts/{id}`) : le pont l'écrase dans `farm_accounts.api_mode` à chaque tick.
+`role` ∈ `persona | brand | observer` ; `paused_until` porte le kill-switch de plateforme décidé côté OFMAI (`health-canaries.md`). Le fork copie `paused_until` dans `farm_accounts` (colonne à ajouter, §5.2) et `planner.tick` saute le compte tant que `now < paused_until`, en plus du test `health_state(acc).can_run(now)` déjà présent. Un compte `role = observer` est renvoyé pour la lecture seule et **jamais recopié dans `farm_accounts`** (`ledger.add_account()` le chaufferait ; son serial vit dans `FARM_OBSERVER_DEVICE`, `health-canaries.md` §2) ; un `role = brand` peut y entrer avec `enabled = 0` (E1.1), jamais planifié. `api_mode` est la source de vérité côté OFMAI (`SocialAccount.apiMode`, `PATCH /api/admin/social/accounts/{id}`) : le pont l'écrase dans `farm_accounts.api_mode` à chaque tick. `disclosed` est le flag du **personnage** (fiche persona, `personas.md`, lu à la requête par `personaForCharacter(characterId)` [à vérifier : `lib/social/personas.ts` n'existe pas encore]), recopié sur chacun de ses comptes : la ferme l'applique aux **bios** (mention IA ou non) et à rien d'autre — le toggle AIGC suit `aigc_label` de l'item de file (§3.2), jamais ce flag relu au moment du post. Règle unique de bascule, la même que `metrics-attribution.md` §8.3 : **`disclosed` ne change pas pendant le test, sauf (a) un compte non déclaré sanctionné par la plateforme pour contenu IA non étiqueté : bascule individuelle, `disclosed_since` daté, le compte sort de la comparaison ; (b) la décision de J21 qui peut déclarer les six.** `disclosed_since` accompagne toujours `disclosed` dans le payload : `null` tant que le personnage n'a pas basculé, date ISO ensuite. Dans tous les exemples de ce fichier, le personnage fitness sert d'exemple : slug `sierra`, handle `@sierra.cole`, « Sierra Cole » (`personas.md` §3.2, à valider par Nathan).
 
-### 3.2 `GET /api/farm/queue?platform=instagram&handle=eva.moore&limit=3&channel=device`
+### 3.2 `GET /api/farm/queue?platform=instagram&handle=sierra.cole&limit=3&channel=device`
 
 Paramètres : `platform`, `handle`, `limit` (défaut 3), `channel=device|api` (défaut `device`). Sans `handle`, tous les comptes du `channel` demandé ; les comptes `apiMode` et les plateformes `x`/`reddit` ne sortent qu'avec `channel=api` (c'est l'appel de `growth-publish-api.js`, `build-plan.md` §12). Publications `queued` (ou `claimed` par le même demandeur, bail non expiré) dont `scheduled_at ≤ now + 30 min`, triées par `scheduled_at` ; rien pour une plateforme `paused`/`cut`, rien pour un compte `health ≠ ok`, jamais une publication Reddit avant `day_of_life ≥ 31` et karma ≥ 100 (`publishing.md` §5). La clé S3 est signée **à la demande** par `signUrlSafe(key)` (`lib/storage/s3.ts`, TTL `S3_SIGNED_URL_TTL`, défaut `10800` s = 3 h) ; la clé brute n'est jamais renvoyée.
 
 ```json
-{"items":[{"publication_id":"pub_9f","variant_id":"cv_9f","asset_id":"ca_31","character_id":"cmf…","platform":"instagram",
-  "handle":"eva.moore","channel":"device","format":"reel","scheduled_at":"2026-09-15T13:40:00-04:00",
+{"items":[{"publication_id":"pub_9f","variant_id":"cv_9f","asset_id":"ca_31","source_post_id":"cmf…","character_id":"cmf…","platform":"instagram",
+  "handle":"sierra.cole","channel":"device","format":"reel","scheduled_at":"2026-09-15T13:40:00-07:00",
   "caption":"post-run glow. yes it's AI, made on ofmai.ai #AI #fitness",
   "media":{"url":"https://hiddn2.s3….mp4?X-Amz-Algorithm=…","kind":"video","content_type":"video/mp4",
            "sha256":"…","bytes":4182233,"duration_s":9.0,"aspect":"9:16"},
-  "aigc_label":true,"content_type":"sfw"}]}
+  "disclosed":true,"aigc_label":true,"content_type":"sfw"}]}
 ```
 
+- `source_post_id` = `ContentAsset.sourcePostId`, le `ScrapedPost.id` du post du radar répliqué pour produire l'asset (unique par personnage, `content-pipeline.md` §2). Informatif pour la ferme (traçabilité dans `farm_publications`, tableau de bord) ; la ferme n'en tire aucune décision.
+- `aigc_label` est `SocialPublication.aigcLabel`, **figé à la mise en file** sur le `disclosed` du personnage à cet instant : c'est la seule source du toggle AIGC sur l'appareil et de `is_aigc` en `api_mode`, jamais la fiche persona relue au moment du post (une bascule de `disclosed`, §3.1, ne touche donc pas une publication déjà en file). `disclosed` est repris dans l'item pour l'audit et les bios, la ferme n'en tire aucune décision de label. La mention IA dans `caption` a déjà été mise, ou non, par le workflow de contenu selon `disclosed` (l'exemple ci-dessus est `sierra`, groupe `declared`) : la ferme poste la légende telle quelle.
 - `channel` ∈ `device` (workflow Ghost `post_video` / `post_photo` / `post_story` selon `format`, §6 étape 3) | `api` (compte en `api_mode` : TikTok via l'API officielle, X et Reddit via leurs API, exécutés par `growth-publish-api.js` sur le Mac mini, `publishing.md`). Les deux canaux suivent le même cycle claim → posted.
 - `caption` est déjà ASCII pour `channel=device` : `HumanInput.type_text` (`gitd/farm/human.py`) supprime tout caractère non ASCII. Le contrôle de conformité de la légende est fait avant la mise en file (`content-pipeline.md`), pas ici.
 - `sha256` sert à vérifier le fichier après téléchargement et à ne pas le re-télécharger si déjà présent sur le Mac mini.
@@ -68,7 +72,7 @@ Body `{"device_serial":"R58N1234"}` — le serial ADB pour `channel=device`, la 
 
 ### 3.5 `GET /api/farm/personas/{character_id}`
 
-Sous-ensemble de la fiche persona (`personas.md`) utile sur l'appareil : `handles` par plateforme, `bio` par plateforme, `niche` (hashtags de détour), `forbidden_words`, `reply_tone`, `links`. Lecture seule, sans cache côté fork au-delà d'une journée.
+Sous-ensemble de la fiche persona (`personas.md`) utile sur l'appareil : `handles` par plateforme, `bio` par plateforme (déjà écrite selon le groupe de divulgation), `disclosed`, `disclosed_since` (`null`, ou la date ISO de la bascule prévue par la règle de §3.1), `niche` (hashtags de détour), `forbidden_words`, `reply_tone`, `links`. Ces deux champs ne servent qu'aux **bios** et au pool `reply_ai` ; le label d'un post vient de `aigc_label` (§3.2). Lecture seule, sans cache côté fork au-delà d'une journée.
 
 ### 3.6 `PATCH /api/farm/publications/{publication_id}`
 
@@ -82,7 +86,7 @@ Un seul endpoint, lot de 1 à 100 événements, corps ≤ 256 Ko. Chaque événe
 
 | `kind` | Quand | `payload` |
 |---|---|---|
-| `posted` | `PostReelAction` / `PostVideoAction` après `session.record(policy.POST, …)` et postcondition vraie | `{publication_id, variant_id, asset_id, post_id: null \| "…", post_url: null \| "…", channel}` — `post_id` est `null` sur l'appareil aujourd'hui (aucun id récupéré par les workflows), renseigné pour `channel=api` |
+| `posted` | `PostReelAction` / `PostVideoAction` après `session.record(policy.POST, …)` et postcondition vraie | `{publication_id, variant_id, asset_id, source_post_id, post_id: null \| "…", post_url: null \| "…", channel}` — `source_post_id` est recopié de l'item de file (§3.2), pour l'audit ; `post_id` est `null` sur l'appareil aujourd'hui (aucun id récupéré par les workflows), renseigné pour `channel=api` |
 | `post_failed` | le job `post_video` se termine en `success=False`, ou le job est `timeout`/`killed` par le scheduler Ghost | `{publication_id, error, attempt, ambiguous: bool}` — `ambiguous=true` si « Share »/« Post » a été tapé mais la postcondition est fausse |
 | `metrics` | relevé à 24, 72 et 168 h (par l'appareil, l'API ou le profil observateur, `health-canaries.md`, `metrics-attribution.md` §5.2) | `{publication_id, post_id, at_hours: 24\|72\|168, source: "device"\|"api"\|"observer", views, likes, comments, shares, saves, impressions, score, upvote_ratio, removed: bool, visible: bool\|null, sub, raw?}` — champs non relevés = `null` ; `at_hours` remplace l'ancien `day: 1\|3\|7` (même unité que `farm_post_metrics.at_hours`, aucune correspondance à maintenir) |
 | `health_signal` | `FarmSession.signal()` (`gitd/farm/ledger.py`) vient d'écrire un `farm_signals` ; ou `accounts clear-health --reason` (`health-canaries.md` §6) | `{signal_kind: "action_blocked"\|"verification"\|"logged_out"\|"suspended"\|"shadowban"\|"cleared", matched, new_health: "ok"\|"cooldown"\|"verification_required"\|"shadowban_suspect"\|"logged_out"\|"suspended", health_until, phase_override, session_id}` (valeurs de `policy.Health` ; `cleared` → `new_health = ok`) |
@@ -94,7 +98,7 @@ Sur réception, OFMAI : `posted` → `SocialPublication.status = posted`, `poste
 
 ### 5.1 Côté OFMAI (`prisma/schema.prisma`, à ajouter)
 
-`ContentAsset` et `ContentAssetVariant` sont définis dans `content-pipeline.md` §2 ; le pont ne lit que `ContentAsset.id/characterId/kind/contentType/qaStatus` et `ContentAssetVariant.id/s3Key/sha256/format/caption/hashtags/compliance` (le master n'a que `masterKey` et `phash` ; le fichier publié est toujours une variante). Rien de ce qui suit n'existe aujourd'hui (aucun modèle `ContentAsset`, `SocialAccount`, `SocialPublication` dans le schéma).
+`ContentAsset` et `ContentAssetVariant` sont définis dans `content-pipeline.md` §2 ; le pont ne lit que `ContentAsset.id/characterId/kind/contentType/qaStatus/sourcePostId` (`sourcePostId` = `ScrapedPost.id` du post du radar répliqué, `@@unique([characterId, sourcePostId])` : un post n'est répliqué qu'une fois par personnage — à construire, `ScrapedPost.replicationStatus` est global et sans personnage dans `prisma/schema.prisma`) et `ContentAssetVariant.id/s3Key/sha256/format/caption/hashtags/compliance` (le master n'a que `masterKey` et `phash` ; le fichier publié est toujours une variante). Rien de ce qui suit n'existe aujourd'hui (aucun modèle `ContentAsset`, `SocialAccount`, `SocialPublication` dans le schéma).
 
 ```prisma
 model SocialAccount {
@@ -124,6 +128,7 @@ model SocialPublication {
   id              String   @id @default(cuid())
   variantId       String                      // ContentAssetVariant.id : le fichier publié
   assetId         String                      // ContentAsset.id, dénormalisé pour le payload
+  sourcePostId    String                      // = ContentAsset.sourcePostId (ScrapedPost.id), dénormalisé pour le payload et l'audit
   socialAccountId String
   platform        String
   channel         String   @default("device") // device | api
@@ -131,7 +136,7 @@ model SocialPublication {
   renderKey       String                      // = ContentAssetVariant.s3Key
   sha256          String                      // = ContentAssetVariant.sha256
   caption         String                      // = ContentAssetVariant.caption, figée à la mise en file
-  aigcLabel       Boolean  @default(true)
+  aigcLabel       Boolean                     // = disclosed du personnage au moment de la mise en file (fiche persona, C5), figé ici : seule source du toggle AIGC sur l'appareil et de is_aigc en api_mode ; pas de défaut : 3 personnages sur 6 ne se déclarent pas
   scheduledAt     DateTime
   status          String   @default("queued") // queued | claimed | posted | failed | needs_human | cancelled
   claimedBy       String?
@@ -226,7 +231,8 @@ Existant : `farm_accounts`, `farm_actions`, `farm_signals` (`models.py`), `farm_
 | `farm_accounts.role` (TEXT, défaut `persona`) | `persona \| brand` — jamais `observer` (E1.1) ; un `brand` n'est jamais planifié |
 | `farm_accounts.market` (TEXT, défaut `US`) | marché du personnage (`SocialAccount.market`) |
 | `farm_accounts.paused_until` (TEXT ISO local) | copie de `paused_until` (§3.1), lu par `planner.tick` |
-| `farm_publications` | `publication_id` UNIQUE, `account_id`, `asset_id`, `scheduled_at` (local), `local_path` (fichier sur le Mac mini), `device_path` (chemin poussé sur l'appareil), `status` (`claimed \| staged \| posting \| posted \| failed \| needs_human`), `job_id` (→ `job_queue.id`), `attempts`, `last_error`, `at` |
+| `farm_accounts.disclosed` (INTEGER 0/1, défaut 0) | copie de `disclosed` (§3.1), rafraîchie à chaque tick ; lue par les workflows de **bio** (`account-creation.md`) seulement — le toggle AIGC suit `params.aigc_label` de l'item de file (§3.2), jamais cette colonne |
+| `farm_publications` | `publication_id` UNIQUE, `account_id`, `asset_id`, `source_post_id` (informatif, §3.2), `scheduled_at` (local), `local_path` (fichier sur le Mac mini), `device_path` (chemin poussé sur l'appareil), `status` (`claimed \| staged \| posting \| posted \| failed \| needs_human`), `job_id` (→ `job_queue.id`), `attempts`, `last_error`, `at` |
 | `farm_outbox` | `event_id` UNIQUE (uuid4), `account_id`, `kind`, `payload_json`, `created_at`, `sent_at` NULL, `attempts`, `next_try_at`, `last_error`, `dead` (0/1) |
 | `farm_comment_cache` | `comment_id` (OFMAI), `account_id`, `text`, `fetched_at`, `used_at` NULL |
 
@@ -237,15 +243,15 @@ Existant : `farm_accounts`, `farm_actions`, `farm_signals` (`models.py`), `farm_
 Un daemon `python -m gitd.farm.cli bridge [--interval 300]`, à côté de `daemon` (planner) et de `python3 run.py` (Ghost). Client HTTP : `requests` (déjà dans `pyproject.toml`). Chaque tick :
 
 0. Si `data/farm/STOP` existe (kill-switch machine, `health-canaries.md` §4) ou si `is_blocked(platform)` : rien pour cette plateforme.
-1. `GET /api/farm/accounts` → met à jour `paused_until`, `api_mode`, `niche` des `farm_accounts` liés par `ofmai_account_id` (jamais `created_on`, `health`, `phase_override` : le ledger fait foi). `api_mode` vient donc d'OFMAI : un `accounts api-mode` fait à la main est écrasé ici.
+1. `GET /api/farm/accounts` → met à jour `paused_until`, `api_mode`, `disclosed`, `niche` des `farm_accounts` liés par `ofmai_account_id` (jamais `created_on`, `health`, `phase_override` : le ledger fait foi). `api_mode` vient donc d'OFMAI : un `accounts api-mode` fait à la main est écrasé ici.
 2. Pour chaque compte enabled, non en pause, `can_run(now)` vrai, `api_mode = 0` : `GET /api/farm/queue?channel=device` → pour chaque item non présent dans `farm_publications` : `claim`, téléchargement dans `data/farm/media/<publication_id>.<ext>`, contrôle `sha256`, `adb push` vers `/sdcard/DCIM/Camera/` puis scan média (`am broadcast -a android.intent.action.MEDIA_SCANNER_SCAN_FILE`) [à vérifier sur GeeLark : intent accepté, dossier indexé par la galerie d'Instagram et de TikTok] ; statut `staged`.
-3. À `scheduled_at` ± `LATE_TOLERANCE_MINUTES` (20 min, `planner.py`) : workflow choisi par `format` (§3.2) — `reel` | `tiktok` → `post_video`, `feed` → `post_photo` (Instagram seulement, E3.6), `story` → `post_story` (Instagram, E3.4) ; un format sans workflow sur cette plateforme → `failed` avec `error = "unsupported_format"`, sans claim ni push. `enqueue_job(job_type="skill_workflow", priority=2, config_json={skill, workflow, params: {handle, caption}, farm_publication: publication_id}, trigger="farm")`, statut `posting`. Les workflows prennent « l'élément le plus récent de la galerie » : c'est pourquoi un seul média est poussé à la fois par appareil, et jamais pendant qu'un job de publication est `running` sur ce téléphone (un job actif par téléphone, `docs/features/scheduler.md`).
+3. À `scheduled_at` ± `LATE_TOLERANCE_MINUTES` (20 min, `planner.py`) : workflow choisi par `format` (§3.2) — `reel` | `tiktok` → `post_video`, `feed` → `post_photo` (Instagram seulement, E3.6), `story` → `post_story` (Instagram, E3.4) ; un format sans workflow sur cette plateforme → `failed` avec `error = "unsupported_format"`, sans claim ni push. `enqueue_job(job_type="skill_workflow", priority=2, config_json={skill, workflow, params: {handle, caption, aigc_label}, farm_publication: publication_id}, trigger="farm")`, statut `posting`. `params.aigc_label` est recopié **tel quel** de l'item de file (§3.2, figé sur `SocialPublication.aigcLabel`) : le pont ne relit jamais la fiche persona ni `farm_accounts.disclosed` à ce moment-là. Aujourd'hui `PostVideoAction` (`gitd/skills/ofmai_tiktok/workflows/__init__.py`) n'accepte que `handle` et `caption` et tape « AI-generated content » sans condition (l. 91, `adapter._tap_text(xml, "AI-generated content")  # toggle if visible` ; la docstring de la classe, l. 37, dit « mandatory for OFMAI characters (TikTok AIGC policy) ») — à changer pour ne taper le toggle que si `params.aigc_label` est vrai, sinon les 3 personnages du groupe `undeclared` seraient étiquetés IA sur TikTok (C5). Les workflows prennent « l'élément le plus récent de la galerie » : c'est pourquoi un seul média est poussé à la fois par appareil, et jamais pendant qu'un job de publication est `running` sur ce téléphone (un job actif par téléphone, `docs/features/scheduler.md`).
 4. Lecture du résultat : `_parse_job_result_data(job_id, log_path=…)` (`gitd/services/_job_helpers.py`) sur la ligne `Data: {…}` imprimée par `gitd/skills/_run_skill.py` ; statut `posted` ou `failed`, événement `posted` / `post_failed` dans `farm_outbox`, suppression du fichier local et du fichier sur l'appareil.
 5. Vidage de `farm_outbox` : lots de ≤ 100 lignes `dead = 0` et `next_try_at ≤ now`, `POST /api/farm/events`.
 6. Rafraîchit `farm_comment_cache` pour chaque compte sous 5 commentaires disponibles (`GET /api/farm/comments`, `n=10`, par `kind`).
 7. Relevés : pour chaque `farm_publications.status = posted` dont `posted_at + {24, 72, 168} h ± 2 h` tombe dans un créneau de `plan_sessions()` du compte (jamais `QUIET_HOURS`, jamais le jour de repos) et sans ligne `farm_post_metrics` pour cet `at_hours` : `enqueue_job(phone_serial=device_serial, job_type="skill_workflow", priority=3, config_json={skill, workflow: "metrics_pull", params: {handle, post_ref}}, max_duration_s=600, trigger="farm")`, idempotent par `farm_planned.slot_key = "<account_id>:metrics:<publication_id>:<at_hours>"`. Comptes `api_mode` X/Reddit : relevé par `publish-api.ts --metrics` (E8.2), pas par l'appareil.
 
-Vidage immédiat : `FarmSession.signal()` (et tout `stop` / `platform cut` à la main) appelle `bridge.flush_now()` — un `threading.Event` quand le daemon tourne dans le même processus, sinon le fichier `data/farm/FLUSH` que le daemon teste toutes les 5 s — pour que `health_signal` parte dans la minute (`rules.md` R33) ; le tick de 300 s reste le filet.
+Vidage immédiat : `FarmSession.signal()` (et tout `stop` / `platform cut` à la main) appelle `bridge.flush_now()` — un `threading.Event` quand le daemon tourne dans le même processus, sinon le fichier `data/farm/FLUSH` que le daemon teste toutes les 5 s — pour que `health_signal` parte dans la minute (`rules.md` R32) ; le tick de 300 s reste le filet.
 
 Le planner passe `params.comments` depuis `farm_comment_cache` ; `WarmSessionAction` ajoute `session_id` et `comments_used` au `Data:` et écrit le `session_summary` dans `farm_outbox` en fin d'`execute` (même transaction que la dernière écriture ledger).
 
@@ -261,7 +267,7 @@ Endpoints FastAPI du fork (nouveau routeur `gitd/routers/farm.py`, préfixe `/ap
 | `POST /api/farm/events` en 400 / 404 / 409 / 422 | `dead = 1`, `last_error`, alerte Discord ; 401 = secret cassé → alerte Discord, boucle en pause 15 min |
 | URL signée expirée au téléchargement (403, TTL 3 h) | nouveau `claim` (URL re-signée) ; si le bail est perdu (`409`), la publication est abandonnée localement |
 | Bail de 60 min expiré avant `posting` | la publication redevient `queued` côté OFMAI ; le fork la re-réclame au tick suivant, `attempts` inchangé |
-| Job `post_video` `success=False` avec `ambiguous=false` (« Create tab not found », « gallery item not found », « post budget exhausted for this day/week »…) | `post_failed`, OFMAI passe en `failed` ; `POST /publications/{id}/retry` par un humain ou le workflow de publication, **au plus 2 tentatives** au total ; l'appareil, pas le média, est en cause dans la plupart des cas |
+| Job `post_video` `success=False` avec `ambiguous=false` (« Create tab not found », « gallery item not found », « post budget exhausted for this day/week »…) | `post_failed`, OFMAI passe en `failed` ; `POST /publications/{id}/retry` par un humain ou le workflow de publication, **au plus 2 tentatives** au total (relances de **publication** du même fichier, sans rapport avec l'unique relance de rendu du contrôle Gemini — une réplication + une relance au plus, soit 2 générations au total par couple (personnage, post source), jouées côté OFMAI avant la mise en file, `content-pipeline.md` §5.5) ; l'appareil, pas le média, est en cause dans la plupart des cas |
 | « Share » tapé mais postcondition fausse, ou job `timeout`/`killed` après le tap | `ambiguous=true` → `needs_human` des deux côtés, Discord ; **jamais de relance automatique** (un doublon coûte plus qu'un post manqué, et `session.record(policy.POST)` a déjà consommé le budget) ; un humain regarde le profil, puis `retry` ou marque `posted` avec le `post_id` via `PATCH /api/farm/publications/{id}` (OFMAI, même secret) |
 | Signal santé pendant un `post_video` | le job s'arrête ; `health_signal` part avant `post_failed` ; la publication est `failed`, le compte n'est plus servi par `GET /api/farm/queue` tant que `health != ok` |
 | Fichier manquant sur l'appareil (appareil réinitialisé) | `staged` repasse à `claimed` si `adb shell ls` échoue avant l'enqueue ; nouveau push |
@@ -273,17 +279,17 @@ Endpoints FastAPI du fork (nouveau routeur `gitd/routers/farm.py`, préfixe `/ap
 # Mac mini : file de publication d'un compte, puis réclamation
 S=$(security find-generic-password -s ofmai-farm-secret -w)
 curl -s -H "x-farm-secret: $S" \
-  "$FARM_OFMAI_BASE_URL/api/farm/queue?platform=instagram&handle=eva.moore&limit=3"
+  "$FARM_OFMAI_BASE_URL/api/farm/queue?platform=instagram&handle=sierra.cole&limit=3"
 curl -s -X POST -H "x-farm-secret: $S" -H "content-type: application/json" \
   -d '{"device_serial":"R58N1234"}' "$FARM_OFMAI_BASE_URL/api/farm/queue/pub_9f/claim"
 
 # Événements retour (lot de deux)
 curl -s -X POST -H "x-farm-secret: $S" -H "content-type: application/json" \
   "$FARM_OFMAI_BASE_URL/api/farm/events" -d '{"events":[
-  {"event_id":"3f1c…","kind":"posted","at":"2026-09-15T13:52:10-04:00","platform":"instagram",
-   "handle":"eva.moore","payload":{"publication_id":"pub_9f","variant_id":"cv_9f","asset_id":"ca_31","post_id":null,"post_url":null,"channel":"device"}},
-  {"event_id":"7a02…","kind":"health_signal","at":"2026-09-15T18:03:44-04:00","platform":"instagram",
-   "handle":"eva.moore","payload":{"signal_kind":"action_blocked","matched":"try again later",
+  {"event_id":"3f1c…","kind":"posted","at":"2026-09-15T13:52:10-07:00","platform":"instagram",
+   "handle":"sierra.cole","payload":{"publication_id":"pub_9f","variant_id":"cv_9f","asset_id":"ca_31","source_post_id":"cmf…","post_id":null,"post_url":null,"channel":"device"}},
+  {"event_id":"7a02…","kind":"health_signal","at":"2026-09-15T18:03:44-07:00","platform":"instagram",
+   "handle":"sierra.cole","payload":{"signal_kind":"action_blocked","matched":"try again later",
    "new_health":"cooldown","health_until":"2026-09-17T18:03:44","phase_override":"light","session_id":"9c2d0b4e1a77"}}]}'
 
 # Fork (sur le Mac mini, en SSH) : état du pont
@@ -293,9 +299,10 @@ curl -s -X POST -H "X-Ghost-Admin-Token: $GITD_ADMIN_TOKEN" http://127.0.0.1:505
 
 ## 9. Tests attendus
 
-- OFMAI (vitest, obligatoire pour tout fichier de `lib/` ou `app/api/`) : `app/api/farm/events/route.test.ts` — 401 sans secret, `duplicates` sur un `event_id` rejoué, `needs_human` sur `ambiguous=true`, upsert `SocialPostMetric` ; `app/api/farm/queue/route.test.ts` — une variante déjà `posted` sur un compte ne ressort jamais, `channel=api` ne renvoie que les comptes `apiMode` et X/Reddit, une publication Reddit sous 31 jours ou 100 karma ne sort pas, bail expiré → `queued`, URL signée présente et clé brute absente ; `middleware.test.ts` — un 61ᵉ appel `/api/farm/queue` en une minute passe.
-- Fork (pytest, patron `tests/test_farm_planner.py`) : `tests/test_farm_bridge.py` — outbox et ledger dans le même commit, backoff, `dead` sur 400/404/409/422 seulement (429/503 → backoff), `paused_until` respecté par `tick`, `STOP` respecté, un seul média poussé par appareil, `comments` transmis au job, workflow choisi par `format` (`unsupported_format` → `failed` sans claim), `test_metrics_pull_enqueued_once_per_horizon`, `flush_now` vide l'outbox sans attendre le tick. Lancement : `sh scripts/farm_tests.sh`.
+- OFMAI (vitest, obligatoire pour tout fichier de `lib/` ou `app/api/`) : `app/api/farm/events/route.test.ts` — 401 sans secret, `duplicates` sur un `event_id` rejoué, `needs_human` sur `ambiguous=true`, upsert `SocialPostMetric` ; `app/api/farm/queue/route.test.ts` — une variante déjà `posted` sur un compte ne ressort jamais, `channel=api` ne renvoie que les comptes `apiMode` et X/Reddit, une publication Reddit sous 31 jours ou 100 karma ne sort pas, bail expiré → `queued`, URL signée présente et clé brute absente, `source_post_id` présent sur chaque item, `aigc_label` est celui figé sur `SocialPublication.aigcLabel` (un personnage `undeclared` donne `false` ; une bascule de `disclosed` après la mise en file ne change pas l'item déjà en file), `disclosed` et `disclosed_since` repris de la fiche persona ; `middleware.test.ts` — un 61ᵉ appel `/api/farm/queue` en une minute passe.
+- Fork (pytest, patron `tests/test_farm_planner.py`) : `tests/test_farm_bridge.py` — outbox et ledger dans le même commit, backoff, `dead` sur 400/404/409/422 seulement (429/503 → backoff), `paused_until` respecté par `tick`, `STOP` respecté, un seul média poussé par appareil, `comments` transmis au job, workflow choisi par `format` (`unsupported_format` → `failed` sans claim), `params.aigc_label` recopié de l'item de file (jamais de `farm_accounts.disclosed`) et `aigc_label=false` → `PostVideoAction` ne tape pas « AI-generated content », `test_metrics_pull_enqueued_once_per_horizon`, `flush_now` vide l'outbox sans attendre le tick. Lancement : `sh scripts/farm_tests.sh`.
 
 ## 10. Hypothèses
 
 - Les deux relectures du 2026-09-14 divergeaient sur l'unité des métriques (`day: 1|3|7` contre `at_hours: 24|72|168`) et sur l'enum des pools (`comment | reply` contre `comment | reply_ai | reply_thanks | reply_question`) : ce fichier retient `atHours` (même unité que `farm_post_metrics`) et l'enum à quatre valeurs (les trois pools de réponses d'E3.2 ont besoin d'être distingués). Les autres fichiers ont été alignés.
+- `disclosed` / `disclosed_since` (par personnage) et `source_post_id` (par asset) sont entrés dans les payloads avec les décisions C2 et C5 du 2026-09-14. Côté Prisma : `sourcePostId` sur `ContentAsset` et `SocialPublication` ; `disclosed` et `disclosed_since` vivent dans la fiche persona, pas dans `SocialAccount` (la fiche fait foi, le pont la recopie) ; seul `aigcLabel`, figé à la mise en file, est stocké sur `SocialPublication`. Le JSON du pont reste en snake_case.
