@@ -9,11 +9,18 @@ _SKILL_DIR = Path(__file__).parent
 
 def load() -> Skill:
     from gitd.skills.ofmai_instagram.actions import GoReels, OpenApp
-    from gitd.skills.ofmai_instagram.workflows import PostVideo, WarmSession
+    from gitd.skills.ofmai_instagram.workflows import (
+        CommentReply,
+        DmReply,
+        PostPhoto,
+        PostStory,
+        PostVideo,
+        WarmSession,
+    )
 
     skill = Skill(_SKILL_DIR)
     for cls in (OpenApp, GoReels):
         skill.register_action(cls)
-    for cls in (WarmSession, PostVideo):
+    for cls in (WarmSession, PostVideo, PostPhoto, PostStory, CommentReply, DmReply):
         skill.register_workflow(cls)
     return skill

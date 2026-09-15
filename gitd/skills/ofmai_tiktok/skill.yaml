@@ -23,6 +23,29 @@ exports:
       params:
         handle: { type: string, required: true }
         caption: { type: string, required: true }
+        aigc_label:
+          type: boolean
+          required: true
+          description: >-
+            AI-generated-content label, frozen on the publication when it was
+            queued and copied here verbatim. No default: the action refuses to
+            post without it, and refuses to post if the on-screen toggle does
+            not end up in exactly this state.
+    - name: comment_reply
+      description: Answer the comments under the newest video. The texts come from OFMAI; the farm types them as they are.
+      params:
+        handle: { type: string, required: true }
+        replies_ai: { type: string, required: false, description: "newline-separated ASCII replies; empty for an undeclared character" }
+        replies_thanks: { type: string, required: false, description: "newline-separated ASCII replies" }
+        replies_question: { type: string, required: false, description: "newline-separated ASCII replies" }
+        max_comments: { type: number, required: false, description: "comments read in one pass (default 10)" }
+    - name: dm_reply
+      description: Answer unread DM threads once each. The texts come from OFMAI; the farm types them as they are.
+      params:
+        handle: { type: string, required: true }
+        replies_ai: { type: string, required: false, description: "newline-separated ASCII replies" }
+        replies_thanks: { type: string, required: false, description: "newline-separated ASCII replies" }
+        replies_question: { type: string, required: false, description: "newline-separated ASCII replies" }
 
 popup_detectors:
   - detect: "Continue editing"
@@ -61,6 +84,19 @@ default_params:
     post_video:
       handle: ""
       caption: ""
+      # aigc_label is deliberately absent: it has no default, and the action
+      # refuses to publish without it (R2, R3).
+    comment_reply:
+      handle: ""
+      replies_ai: ""
+      replies_thanks: ""
+      replies_question: ""
+      max_comments: 10
+    dm_reply:
+      handle: ""
+      replies_ai: ""
+      replies_thanks: ""
+      replies_question: ""
 
 # Health signals ("You're tapping too fast", "Verify to continue", ...) are
 # matched by gitd/farm/health.py and end the session; never dismissed here.

@@ -30,8 +30,24 @@ PROFILE_VISIT = "profile_visit"
 SEARCH = "search"
 DM_REPLY = "dm_reply"
 COMMENT_REPLY = "comment_reply"
+# Publishing a story of one's own — Instagram only. Distinct from STORY_VIEW
+# (watching someone else's, a warming detour) and from POST, whose weekly cap
+# a story must never eat (warming-policy.md §2, build-plan.md E3.4).
+STORY_POST = "story_post"
 
-ACTIONS = (VIEW, LIKE, SAVE, FOLLOW, COMMENT, POST, STORY_VIEW, PROFILE_VISIT, SEARCH, DM_REPLY, COMMENT_REPLY)
+ACTIONS = (VIEW, LIKE, SAVE, FOLLOW, COMMENT, POST, STORY_VIEW, PROFILE_VISIT, SEARCH, DM_REPLY, COMMENT_REPLY, STORY_POST)
+
+# ── Platforms ─────────────────────────────────────────────────────────────────
+
+# Every platform an account may be registered on. ``telegram`` has no skill yet
+# (M2): the model accepts it so a handle can be booked, the planner skips it
+# because no skill answers for it (see ``planner.SKILL_BY_PLATFORM``).
+PLATFORMS = ("instagram", "tiktok", "x", "reddit", "telegram")
+
+# Roles an account may carry. The observer profile is deliberately absent: it
+# is never warmed, never posts and never enters the ledger — its serial lives
+# in ``settings.farm_observer_device`` (docs/social/health-canaries.md §2).
+ROLES = ("persona", "brand")
 
 # Ratios that must hold at all times within a day (numerator / denominator).
 MAX_LIKE_PER_VIEW = 0.15
@@ -69,7 +85,8 @@ CAPS: dict[Phase, PhaseCaps] = {
 }
 
 # TikTok is harsher on multi-account detection: each phase lasts 3 more days.
-PHASE_EXTRA_DAYS = {"instagram": 0, "tiktok": 3}
+# X, Reddit and Telegram follow the Instagram calendar (warming-policy.md §1).
+PHASE_EXTRA_DAYS = {"instagram": 0, "tiktok": 3, "x": 0, "reddit": 0, "telegram": 0}
 
 # Local hours during which nothing ever happens.
 QUIET_HOURS = range(1, 7)
@@ -141,6 +158,10 @@ class DailyBudget:
             VIEW: 10_000,  # bounded by session time, not by count
             DM_REPLY: 20 if phase == Phase.CRUISE else 0,
             COMMENT_REPLY: 20 if phase in (Phase.NETWORK, Phase.CRUISE) else 0,
+            # Stories: Instagram only, one a day from `network` on. No other
+            # platform can ever spend one — TikTok has no story workflow, X and
+            # Reddit have no stories at all.
+            STORY_POST: 1 if platform == "instagram" and phase in (Phase.NETWORK, Phase.CRUISE) else 0,
         }
         if rest_day:
             caps = {k: 0 for k in caps}

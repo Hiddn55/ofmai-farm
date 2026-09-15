@@ -1,0 +1,32 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!DOCTYPE plist PUBLIC "-//Apple//DTD PLIST 1.0//EN" "http://www.apple.com/DTDs/PropertyList-1.0.dtd">
+<!-- The bridge to OFMAI: pull the queue, push media, send events back.
+     It needs an UNLOCKED login Keychain (the bridge secret lives there), which
+     is why the operator account logs in automatically at boot.
+     NOT LOADABLE until `gitd.farm.cli bridge` exists (E7.3).
+     Replace OPERATOR with the operator account's short name before installing. -->
+<plist version="1.0">
+<dict>
+  <key>Label</key>                 <string>ai.ofmai.farm.bridge</string>
+  <key>ProgramArguments</key>
+  <array>
+    <string>/usr/bin/env</string>
+    <string>python3</string>
+    <string>-m</string>
+    <string>gitd.farm.cli</string>
+    <string>bridge</string>
+    <string>--interval</string>
+    <string>300</string>
+  </array>
+  <key>WorkingDirectory</key>      <string>/Users/OPERATOR/ofmai-farm</string>
+  <key>EnvironmentVariables</key>
+  <dict>
+    <key>PYTHONPATH</key>          <string>.</string>
+    <key>PATH</key>                <string>/opt/homebrew/bin:/usr/local/bin:/usr/bin:/bin:/usr/sbin:/sbin</string>
+  </dict>
+  <key>RunAtLoad</key>             <true/>
+  <key>KeepAlive</key>             <true/>
+  <key>StandardOutPath</key>       <string>/Users/OPERATOR/Library/Logs/ofmai-farm/bridge.log</string>
+  <key>StandardErrorPath</key>     <string>/Users/OPERATOR/Library/Logs/ofmai-farm/bridge.log</string>
+</dict>
+</plist>

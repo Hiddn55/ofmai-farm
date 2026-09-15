@@ -70,7 +70,7 @@ class WarmSessionAction(Action):
             return ActionResult(success=True, data={"skipped": "rest day", "day_of_life": budget.day_of_life})
         minutes = self.minutes or max(1.0, budget.session_minutes / max(1, budget.sessions))
         niche = self.niche or parse_list(acc.niche, ",")
-        now, sleep = _clock()
+        now, sleep = clock()
         human = HumanInput(self.device, SessionProfile.generate(self.seed), sleep=sleep)
         adapter = self.adapter_factory(self.device, self.elements, human)
         cfg = WarmConfig(
@@ -95,7 +95,14 @@ class WarmSessionAction(Action):
             "day_of_life": budget.day_of_life,
             "phase": budget.phase.value,
             "profile_seed": human.profile.seed,
+            "session_id": session.session_id,
         }
+        # A health signal ended the session: the account is already under
+        # suspicion, we do not walk it through one more screen (R27).
+        karma = None if stats.health else read_karma(adapter)
+        if karma is not None:
+            data["karma"] = karma
+        _queue_session_summary(session, data)
         if stats.health:
             return ActionResult(success=False, error=f"health signal: {stats.health}", data=data)
         if stats.error and stats.videos == 0:
@@ -103,11 +110,53 @@ class WarmSessionAction(Action):
         return ActionResult(success=True, data=data)
 
 
-def _clock():
+def read_karma(adapter) -> int | None:
+    """The account's own karma, through the adapter's optional ``read_karma`` hook.
+
+    Reddit is the only gate that needs it: OFMAI serves no Reddit publication
+    below 100 karma (`publishing.md` §5) and the number exists nowhere but the
+    account's own profile screen, so it has to come back on the one event that
+    already leaves at every session — `session_summary`.
+
+    The hook is optional on purpose. An adapter that cannot reach that screen
+    yet returns nothing and the key is simply absent from the payload: OFMAI
+    then knows the karma is *unknown*, which is not the same thing as zero.
+    """
+    hook = getattr(adapter, "read_karma", None)
+    if not callable(hook):
+        return None
+    try:
+        value = hook()
+    except Exception as e:  # noqa: BLE001 — a session is never lost over a reading
+        log.warning("[warm] karma not read on %s: %s", getattr(adapter, "platform", "?"), e)
+        return None
+    if value is None or isinstance(value, bool) or not isinstance(value, (int, float)):
+        return None
+    karma = int(value)
+    return karma if karma >= 0 else None
+
+
+def _queue_session_summary(session, data: dict) -> None:
+    """Write the ``session_summary`` event for OFMAI (`bridge-ofmai-farm.md` §4.1).
+
+    Same transaction as the last ledger write: `FarmSessionLog`, the used comment
+    texts and the account's `warming → cruise` progress all come from this one
+    event. A bridge that cannot be reached only means the row waits in the outbox.
+    """
+    try:
+        from gitd.farm import bridge
+
+        bridge.queue_event(session.db, session.account, "session_summary", data)
+    except Exception as e:  # noqa: BLE001 — a session is never lost over an event
+        log.warning("[warm] session summary not queued: %s", e)
+
+
+def clock():
     """(now, sleep): real time, or a virtual clock when FARM_FAST=1 (bench dry runs).
 
     In fast mode sleeps do not wait but still advance ``now``, so a "2 minute"
-    session runs instantly yet makes the same decisions.
+    session runs instantly yet makes the same decisions. The posting workflows
+    use the same pair so they can be dry-run without a phone (R35).
     """
     import time
 
@@ -122,3 +171,7 @@ def _clock():
         t[0] += s
 
     return now, sleep
+
+
+# kept for callers that imported the private name
+_clock = clock

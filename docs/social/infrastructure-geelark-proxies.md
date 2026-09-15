@@ -2,8 +2,8 @@
 
 > **Nature** : reference
 > **Statut** : à vérifier — runbook écrit avant la première mise en service ; les points que la doc GeeLark / IPRoyal ne confirme pas sont marqués [à vérifier]
-> **À jour au** : 2026-09-14
-> **Répond à** : comment on monte, relie et maintient un téléphone virtuel par personnage (compte GeeLark, profil, proxies, ADB depuis le Mac mini, enregistrement dans Ghost et dans le ledger), ce que ça coûte, et quoi faire quand ça casse
+> **À jour au** : 2026-09-15
+> **Répond à** : comment on monte, relie et maintient un téléphone virtuel par personnage (compte GeeLark, profil, proxy, ADB depuis le Mac mini, enregistrement dans Ghost et dans le ledger), ce que ça coûte, et quoi faire quand ça casse
 > **Code concerné** : fork ofmai-farm `gitd/config.py`, `gitd/bots/common/adb.py`, `gitd/services/device_context.py`, `gitd/routers/phone.py`, `gitd/models/phone.py`, `gitd/farm/ledger.py`, `gitd/farm/models.py`, `gitd/farm/planner.py`, `gitd/farm/cli.py`, `gitd/farm/policy.py`, `gitd/farm/health.py`, `gitd/skills/gmail_utils.py`, `docs/TROUBLESHOOTING.md` ; OFMAI `lib/ingest/instagram-proxy.ts`, `scripts/radar/TODO.md`, `.claude/loop/notify.mjs`
 
 Les composants et leurs flux sont dans `architecture.md` ; les règles réseau non négociables (R18-R21) dans `rules.md` ; la création des comptes sur le téléphone dans `account-creation.md` ; les canaris qui utilisent le profil observateur dans `health-canaries.md` ; les tâches à coder dans `build-plan.md`. Ici : le matériel virtuel et le réseau, du compte GeeLark au serial ADB enregistré dans `farm_accounts`.
@@ -13,18 +13,18 @@ Les composants et leurs flux sont dans `architecture.md` ; les règles réseau n
 | Composant | Sait | Ne sait pas |
 |---|---|---|
 | GeeLark (cloud phone) | modèle, Android, région, langue, fuseau, GPS, proxy du profil ; expose un endpoint ADB (`ip:port` + code) quand le téléphone tourne | rien d'OFMAI, rien du ledger |
-| IPRoyal | deux proxies par personnage : une IP statique ISP US (« domicile ») et un mobile en session collante, même État (« dehors ») | sur quel téléphone ils sont posés |
+| IPRoyal | **une seule** adresse par personnage : statique résidentielle ISP US, trafic illimité, posée une fois et jamais changée | sur quel téléphone elle est posée |
 | Mac mini (Paris) — Ghost | `adb -s <serial>` pour tout (`Device(serial)`, `gitd/bots/common/adb.py`), table `phones` (`serial`, `nickname`, `model`, `wifi_ip`, `wifi_port`, `connection_type` — `gitd/models/phone.py`), un job actif par téléphone (`docs/features/scheduler.md`) | proxy, GeeLark : `grep -ri "proxy\|geelark\|iproyal" gitd/farm/` ne renvoie rien |
 | Fork `gitd/farm/` | `farm_accounts.device_serial` (un compte par plateforme et par serial, `ledger.add_account()`), `timezone` (défaut `America/New_York`), `created_on` | l'adresse IP du téléphone, le proxy, le profil GeeLark |
-| OFMAI | `SocialAccount.deviceSerial`, `timezone`, `role` (`persona \| brand \| observer`) — `bridge-ofmai-farm.md` §5.1 ; le pont ne transporte jamais d'identifiant proxy ou GeeLark | — |
+| OFMAI | `SocialAccount.deviceSerial`, `timezone`, `role` (`persona \| brand \| observer \| explorer`) — `bridge-ofmai-farm.md` §5.1 ; le pont ne transporte jamais d'identifiant proxy ou GeeLark | — |
 
-Conséquence : **le seul lien entre les trois mondes est le serial ADB** (`ip:port` côté GeeLark = `phones.serial` côté Ghost = `farm_accounts.device_serial` côté farm = `SocialAccount.deviceSerial` côté OFMAI). Tout le reste (id de profil GeeLark, proxies) vit dans un registre local du Mac mini, hors repo (§4.4).
+Conséquence : **le seul lien entre les trois mondes est le serial ADB** (`ip:port` côté GeeLark = `phones.serial` côté Ghost = `farm_accounts.device_serial` côté farm = `SocialAccount.deviceSerial` côté OFMAI). Tout le reste (id de profil GeeLark, proxy) vit dans un registre local du Mac mini, hors repo (§4.3).
 
 ## 2. Compte GeeLark
 
 - **Plan** : Base — API, ADB et RPA sont inclus (page « API » et glossaire « Android Debug Bridge » de geelark.com). ADB est disponible sur Android 9, 11, 12, 13, 14 et 15 ; le téléphone doit être **démarré** avant d'activer ADB, l'activation est asynchrone (attendre ≈ 3 s avant de lire ip/port/code).
 - **Tarif** : le brief budgète **29,9 $/mois par téléphone en illimité**. Revue GoLogin (mise à jour 2026-09-01) : location dédiée 24,90 $/mois + 5 $ pour Android 14 = 29,90 $, sans plafond quotidien, −10 % (90 j), −20 % (180 j), −30 % (360 j) ; abonnement Base 13 $/mois (20 profils, 60 min incluses) ; hors location, 0,007 $/min plafonné à 1 $/jour/téléphone (1,20 $ selon une autre source). La page officielle `geelark.com/pricing` n'a pas pu être lue (contenu tronqué) [à vérifier avant l'achat : prix exact du plan Base, prix de la location dédiée par version Android, existence du plafond journalier].
-- **Décision** : les 6 téléphones de personnages sont en **location dédiée 24/7** (un téléphone qui ne s'éteint jamais est un vrai téléphone ; l'endpoint ADB ne bouge pas ; pas de « redémarrage » quotidien visible par les apps). L'observateur (§6) est en facturation à la minute : ≈ 10 min/jour.
+- **Décision** : les 6 téléphones de personnages sont en **location dédiée 24/7** (un téléphone qui ne s'éteint jamais est un vrai téléphone ; l'endpoint ADB ne bouge pas ; pas de « redémarrage » quotidien visible par les apps). L'observateur (§6.1) est en facturation à la minute : ≈ 10 min/jour.
 - **Token API** : Trousseau macOS du Mac mini, même mécanisme que `ofmai-discord-webhook` dans `.claude/loop/notify.mjs` :
 
 ```sh
@@ -44,18 +44,20 @@ Un profil GeeLark = un personnage = un téléphone = une identité réseau (R8, 
 |---|---|---|
 | Nom | `<slug>-us` | même chaîne partout (Ghost, registre local, `utm_content`) |
 | Type d'appareil | un modèle grand public courant aux États-Unis, **un modèle différent par personnage** | deux personnages sur le même modèle + même version = même empreinte ; liste des modèles offerts [à vérifier dans l'UI] |
-| Android | 13 ou 14 (ADB supporté 9-15) | 14 coûte +5 $/mois selon la revue ; même version pour toute la durée de vie |
+| Android | **13** (ADB supporté 9-15 ; `netType` supporté sur 12, 13 et 15) | la version retenue doit accepter `netType` = 0, ce qui exclut la 14 [à vérifier dans l'API GeeLark] ; même version pour toute la durée de vie |
 | Région | **Auto-match** sur le proxy statique | GeeLark aligne alors fuseau, GPS et langue système sur l'IP (blog « cloud-phone-proxy », « GeeLark 101 ») |
 | Langue | `en-US` (résultat de l'Auto-match sur une IP US ; vérifier) | les `elements.yaml` des deux skills sont écrits sur les libellés en-US (`docs/FARM.md`) |
 | Fuseau | celui de la ville de l'IP statique | **doit être identique** à `farm_accounts.timezone` (`accounts add --tz`) : `plan_sessions()` et `QUIET_HOURS = range(1, 7)` calculent dans ce fuseau (R15, R20) |
 | GPS | ville de l'IP statique | ne se règle jamais à la main |
-| Proxy | l'IP statique ISP du personnage (§4) | posée **avant** le premier démarrage ; le mobile n'est ajouté qu'au moment d'une bascule |
+| Proxy | l'**unique** IP statique ISP du personnage (§4) | posée **avant** le premier démarrage ; elle ne change plus jamais ensuite (R18), aucun « Change proxy » sur un profil en service |
+| Réseau déclaré | **Wi-Fi** — `netType` = 0 à la création | l'adresse est une connexion domestique : un téléphone qui se dit en 4G tout en sortant par une IP résidentielle fixe est incohérent |
 
 Création (CLI) — `proxyInformation` accepte une URL `socks5://user:pass@host:port` (exemple du README) ; HTTP [à vérifier] :
 
 ```sh
-geelark-cli phone create --region "us" --mobile-type "Android 14" \
-  --data '[{"profileName":"sierra-us","proxyInformation":"socks5://USER:PASS@HOST:PORT"}]'
+geelark-cli phone create --region "us" --mobile-type "Android 13" \
+  --data '[{"profileName":"sierra-us","proxyInformation":"socks5://USER:PASS@HOST:PORT","netType":0}]'
+# netType 0 = Wi-Fi (Android 12, 13, 15) — obligatoire, l'adresse est résidentielle fixe
 # [à vérifier] : code de région US exact (l'exemple du README est "sgp"), champ Auto-match dans --data
 ```
 
@@ -70,58 +72,42 @@ adb -s "$SERIAL" shell getprop ro.product.model
 
 **Ne changent jamais** sur la vie du profil : modèle, version Android, région, langue, fuseau, IP statique. **Jamais « New cloud phone »** sur un profil en service : GeeLark remplace l'appareil et efface ses données (note de version v1.8.0) — pour la plateforme c'est un compte qui apparaît sur un second téléphone. Rayon d'un `suspended` (même règle que R18, `health-canaries.md` S5, `account-creation.md` §9) : au **1ᵉʳ** `suspended` sur un téléphone, seule la plateforme concernée est abandonnée sur ce téléphone (30 j sans nouvelle inscription sur cette plateforme), le profil et l'IP restent ; au **2ᵉ** `suspended` sur le même téléphone dans les 30 j, toute plateforme, téléphone et IP entrent en quarantaine `QUARANTINE_DAYS = 30` (`gitd/farm/policy.py`), tous les comptes sont `disable`, puis le profil est **supprimé** et l'IP rendue, jamais recyclés pour un autre personnage ; le personnage repart sur un nouveau profil et de nouveaux comptes.
 
-Fuseaux des six villes de `personas.md` §3.2 (la ville de la fiche est l'État du proxy statique) : Los Angeles (`sierra-us`), San Francisco (`hana-us`), Las Vegas (`skyler-us`), Seattle (`riley-us`) → `America/Los_Angeles` ; Miami (`camila-us`) → `America/New_York` ; Chicago (`vera-us`) → `America/Chicago`. L'observateur (§6) prend un État qu'aucun personnage n'occupe.
+**Le choix de la ville n'est pas libre** : IPRoyal est en rupture sur la plupart des villes américaines. On achète d'abord les sept adresses parmi les villes réellement disponibles le jour de l'achat, puis on aligne la ville, le GPS, le fuseau et la fiche persona (`personas.md` §3.2) sur l'adresse obtenue — jamais l'inverse. Les villes de `personas.md` §3.2 sont donc des souhaits, pas des engagements ; le fuseau qui en découle est celui qui part dans `accounts add --tz` (R20). À titre indicatif, la répartition visée : Los Angeles (`sierra-us`), San Francisco (`hana-us`), Las Vegas (`skyler-us`), Seattle (`riley-us`) → `America/Los_Angeles` ; Miami (`camila-us`) → `America/New_York` ; Chicago (`vera-us`) → `America/Chicago`. L'observateur (§6.1) prend un État qu'aucun personnage n'occupe ; l'explorateur (§6.2) prend ce qui reste en stock.
 
 ## 4. Proxies IPRoyal par profil
 
-### 4.1 Les deux proxies d'un personnage
+### 4.1 L'adresse unique d'un personnage
 
-| | Statique résidentiel ISP (« domicile ») | Mobile, session collante (« dehors ») |
-|---|---|---|
-| Prix (page pricing IPRoyal) | **2,40 $/IP/mois** sur engagement 90 j (2,70 $ sur 30 j, 2,55 $ sur 60 j) | **5,20 $/Go** au palier 100 Go ; palier réel de notre achat [à vérifier] |
-| Sert à | chauffe, scroll, réponses, l'essentiel des posts ; Auto-match région/fuseau/GPS | création du compte, vérifications, une partie des sessions de post — une à deux fois par jour |
-| Ne change | **jamais** (R18) ; se retire avec le personnage | à chaque session collante (durée de collage [à vérifier]) |
-| Localisation | ville choisie ; définit le fuseau du compte | **même État**, même métropole si possible ; jamais un autre fuseau |
-| Partage | une IP par personnage, jamais partagée, jamais réutilisée | un identifiant mobile par personnage |
+Un personnage = **une seule adresse**, et elle sert à tout. Le volet mobile du brief est supprimé (décision 3 de `00-brief-decisions.md`, qui porte les raisons) : il n'y a plus de proxy « dehors », plus de session collante, plus de bascule.
 
-Format des entrées, identique à ce que `lib/ingest/instagram-proxy.ts` accepte : `http://user:pass@host:port`, `user:pass@host:port`, `host:port:user:pass`. Choix de l'État à l'achat (ISP) et ciblage État/ville du mobile [à vérifier dans le dashboard IPRoyal].
+| | Statique résidentielle ISP US, trafic illimité |
+|---|---|
+| Prix (page pricing IPRoyal, relevé le 2026-09-15) | **2,70 $/IP pour 30 jours** (2,55 $ sur 60 j, 2,40 $ sur 90 j) |
+| Sert à | **tout, sans exception** : création du compte Google, inscriptions aux plateformes, vérifications, chauffe, scroll, réponses, posts, et les appels d'API X et Reddit depuis le Mac mini (R21) ; Auto-match région/fuseau/GPS |
+| Ne change | **jamais** (R18) : posée une fois avant le premier démarrage, elle se retire avec le personnage |
+| Localisation | une ville prise dans le stock réellement disponible à l'achat (§3) ; définit le fuseau et le GPS du compte |
+| Partage | une IP par personnage, jamais partagée, jamais réutilisée |
 
-**Le compte IPRoyal existant ne sert pas aux personnages.** `scripts/radar/TODO.md` (vérifié le 2026-09-04) : 10 entrées ISP statiques, port 12323, AS7849 RingSquared (Springfield MA) et AS20012 Interworks (Mesa AZ), déjà utilisées par le scraping (`INSTAGRAM_PROXY_URLS`, `ONLYSTATS_PROXY_URLS`) et documentées en **429** sur l'API web Instagram (`documentation/explore/instagram-system.md` § Failed alternatives). On achète 7 IP neuves (6 personnages + observateur) ; une des 10 anciennes peut, au pire, servir à l'observateur déconnecté [à vérifier].
+Format des entrées, identique à ce que `lib/ingest/instagram-proxy.ts` accepte : `http://user:pass@host:port`, `user:pass@host:port`, `host:port:user:pass`. Choix de l'État et de la ville à l'achat, dans ce que le dashboard IPRoyal affiche en stock ce jour-là.
 
-### 4.2 Quand basculer, et jamais quand
+**Le compte IPRoyal existant ne sert pas aux personnages.** `scripts/radar/TODO.md` (vérifié le 2026-09-04) : 10 entrées ISP statiques, port 12323, AS7849 RingSquared (Springfield MA) et AS20012 Interworks (Mesa AZ), déjà utilisées par le scraping (`INSTAGRAM_PROXY_URLS`, `ONLYSTATS_PROXY_URLS`) et documentées en **429** sur l'API web Instagram (`documentation/explore/instagram-system.md` § Failed alternatives). On achète 7 IP neuves en vague 0 (6 personnages + observateur), puis une **huitième avant la vague 3** pour le profil explorateur (§6.2, ville indifférente) : 8 au total ; une des 10 anciennes peut, au pire, servir à l'observateur déconnecté [à vérifier].
 
-- **Jamais en cours d'action** : une IP qui change pendant un scroll, un upload ou un login est le motif « suspicious login » (R19). Un job Ghost en cours sur le serial = pas de bascule : `curl -s http://127.0.0.1:5055/api/scheduler/status` doit ne montrer aucun job `running` sur ce téléphone.
-- **Seulement entre deux sessions**, dans le creux que `plan_sessions()` garantit (≥ 45 min entre deux sessions, `gitd/farm/policy.py`), et **jamais 01:00-06:59** heure locale du compte (`QUIET_HOURS`).
-- **Une à deux fois par jour**, pas plus : statique → mobile avant une session de post ou une vérification, mobile → statique dans l'heure qui suit la fin. Le téléphone « rentre chez lui ».
-- **Jamais comme contournement** d'un proxy statique mort (§9) ni d'un signal santé : un compte en `cooldown` / `verification_required` ne change pas d'IP.
-- Aucun code ne fait la bascule aujourd'hui (§1) : c'est un geste humain ou un script à écrire (`build-plan.md`), déclenché par le workflow de publication avant un `post_video` (`publishing.md`).
+### 4.2 Une adresse posée une fois, et plus jamais touchée
 
-### 4.3 Procédure de bascule (statique → mobile → statique)
+- **Aucune bascule de proxy, nulle part.** L'entrée IPRoyal d'un profil GeeLark est posée avant le premier démarrage (§3) et n'est plus jamais modifiée : ni pour créer un compte, ni pour une vérification, ni pour une session de post (R18).
+- **« Change proxy » est interdit sur un profil en service.** Une IP qui change est le motif « suspicious login », et GeeLark peut rejouer l'Auto-match et déplacer fuseau et GPS sous les pieds du compte (R20). C'est R19, réécrite en ce sens le 2026-09-15 : une seule adresse par personnage, jamais touchée sur un profil en service. GeeLark recommande lui-même de ne pas changer de proxy sans raison (blog « cloud-phone-proxy »).
+- **Jamais comme contournement** d'une adresse morte (§9) ni d'un signal santé : un compte en `cooldown` / `verification_required` ne change pas d'IP, on attend le retour de la même adresse.
+- Conséquence côté code : **aucun script de bascule à écrire** (`build-plan.md`), et le workflow de publication (`publishing.md`) ne touche jamais au réseau avant un `post_video`.
 
-```sh
-# 0. aucun job en cours sur le serial, on est hors QUIET_HOURS, pas de session planifiée dans les 15 min
-curl -s http://127.0.0.1:5055/api/scheduler/status
-python -m gitd.farm.cli plan instagram @sierra.cole      # heures des sessions du jour
-# 1. GeeLark : profil ⋯ → Change proxy → entrée mobile du personnage → Check proxy (IP de sortie US, même État)
-#    (par CLI : commande de changement de proxy [à vérifier dans geelark-cli])
-# 2. attendre 2-5 min sans rien faire (le téléphone « sort »), vérifier que le fuseau n'a pas bougé
-adb -s "$SERIAL" shell getprop persist.sys.timezone
-# 3. lancer la session de post (workflow post_video) ou la vérification (checkpoint, account-creation.md)
-# 4. dans l'heure : Change proxy → entrée statique du personnage → Check proxy → même contrôle du fuseau
-```
-
-Si GeeLark ré-aligne le GPS sur l'IP mobile après un « Change proxy » [à vérifier : l'Auto-match est-il rejoué], choisir un mobile de la **même métropole** que l'IP statique ; un saut de 500 km en deux minutes est pire qu'un GPS fixe. GeeLark recommande lui-même de rester « proche du réglage précédent » et de ne pas changer de proxy sans raison (blog « cloud-phone-proxy »).
-
-### 4.4 Où vivent les identifiants proxy
+### 4.3 Où vivent les identifiants proxy
 
 Jamais dans le repo, jamais dans `farm_accounts.notes`, jamais dans un `config_json` de job (R9 : la SQLite de Ghost n'est pas chiffrée et son REST n'a pas d'authentification). Trousseau macOS du Mac mini, une entrée par proxy, valeur au format `host:port:user:pass` :
 
 ```sh
 security add-generic-password -a ofmai -s ofmai-proxy-sierra-static -w 'HOST:PORT:USER:PASS'
-security add-generic-password -a ofmai -s ofmai-proxy-sierra-mobile -w 'HOST:PORT:USER:PASS'
 ```
 
-Registre local `~/.ofmai/farm/phones.json` (chmod 600, hors repo) : `{ "sierra": { "geelark_profile_id": "…", "serial": "IP:PORT", "timezone": "America/Los_Angeles", "static": "ofmai-proxy-sierra-static", "mobile": "ofmai-proxy-sierra-mobile", "role": "persona" } }` — une entrée par slug (`sierra`, `camila`, `hana`, `skyler`, `riley`, `vera`, `observer`), et elle ne contient que des **noms** d'entrées Trousseau, pas de valeurs. Les appels API X / Reddit qui doivent sortir par l'IP statique du personnage (R21, `publishing.md`) lisent la même entrée Trousseau.
+Registre local `~/.ofmai/farm/phones.json` (chmod 600, hors repo) : `{ "sierra": { "geelark_profile_id": "…", "serial": "IP:PORT", "timezone": "America/Los_Angeles", "static": "ofmai-proxy-sierra-static", "role": "persona" } }` — une entrée par slug (`sierra`, `camila`, `hana`, `skyler`, `riley`, `vera`, `observer`, `explorer`), et elle ne contient que des **noms** d'entrées Trousseau, pas de valeurs. Les appels API X / Reddit qui doivent sortir par l'IP statique du personnage (R21, `publishing.md`) lisent la même entrée Trousseau.
 
 ## 5. ADB depuis le Mac mini et enregistrement dans Ghost
 
@@ -181,17 +167,32 @@ et mettre à jour `~/.ofmai/farm/phones.json` puis `SocialAccount.deviceSerial` 
 
 Ghost écoute sur `0.0.0.0:5055` (`gitd/config.py`) **sans authentification** (sauf `GITD_ADMIN_TOKEN` sur `POST /api/skills/install`, `.env.example`). Le port n'est jamais exposé : pare-feu macOS fermé, accès depuis la Thaïlande en SSH avec tunnel (`ssh -L 5055:127.0.0.1:5055 -L 6175:127.0.0.1:6175 <mac-mini>`), dashboard sur `http://localhost:6175`. Le flux vidéo d'un téléphone se regarde dans l'onglet Phone Agent (MJPEG en repli, `docs/TROUBLESHOOTING.md`) — c'est par là qu'un humain voit un écran de vérification avant un `clear-health` (R26).
 
-## 6. Profil observateur
+## 6. Profils sans personnage : observateur et explorateur
+
+Deux profils ne portent aucun personnage, n'entrent jamais dans `farm_accounts` et ne sont jamais planifiés. Ils ont chacun leur propre adresse statique, jamais celle d'un personnage.
+
+### 6.1 Profil observateur
 
 - Un **septième profil** `observer-us`, même construction (§3), **proxy statique propre**, dans un État différent de tous les personnages, jamais une IP de personnage.
 - Apps installées (§7) mais **jamais connecté** à aucun compte : il regarde un profil public Instagram, un sub Reddit (`new`), une vidéo TikTok, exactement comme un inconnu. Pas de canari X (la recherche X exige une session, décision V1 dans `health-canaries.md` §2 : la visibilité X se lit sur les impressions du compte). C'est la seule façon de mesurer un shadowban ; la mesure depuis le compte lui-même est biaisée.
 - Facturation à la minute (§2) : le workflow de canaris démarre le téléphone, lit, l'arrête — ≈ 10 min/jour, ≈ 2-3 $/mois. Il est démarré/arrêté par `geelark-cli phone start|stop`, donc son `ip:port` peut changer : le script de connexion (§5.2) le relie à chaque tour [à vérifier : stabilité du port].
 - Enregistré dans Ghost (`phones.nickname = observer-us`) et dans `DEFAULT_DEVICE` ; **pas** dans `farm_accounts` (pas de handle, `add_account` en exige un) ; côté OFMAI une ligne `SocialAccount` avec `role = "observer"`, `handle = "observer-us"`, `characterId = null` (`bridge-ofmai-farm.md` §5.1).
-- Jamais utilisé pour un checkpoint, un login ou une publication ; jamais bascule de proxy.
+- Jamais utilisé pour un checkpoint, un login ou une publication ; son adresse ne bouge pas plus que celle d'un personnage (§4.2).
+
+### 6.2 Profil explorateur (huitième profil, sacrificiel)
+
+- Un **huitième profil** `explorer-us`, même construction (§3), **sa propre adresse statique** (§4, une huitième IP) et **ses propres comptes**, créés à la main sur les quatre plateformes. La ville n'a aucune importance : ce profil ne porte aucun personnage, donc aucun fuseau ni GPS à faire correspondre à une fiche — on prend ce que le fournisseur a en stock ce jour-là.
+- **À quoi il sert** : ouvrir et relever les écrans des applications — création de publication, commentaires, boîte de réception, écran de statistiques d'un post — pour corriger les `elements.yaml` des skills (Skill Miner, `build-plan.md` E4.1). La politique de chauffe interdit précisément ces écrans à un compte neuf (`warming-policy.md` §2 : 0 commentaire et 0 post avant `network`, 0 follow en `consume`) : les ouvrir sur le téléphone d'un personnage détruirait sa chauffe et signerait un comportement de robot dès le premier jour.
+- **Les repères d'écran appartiennent à l'application, pas au compte** : un `content-desc` ou un `resource-id` relevé sur l'explorateur vaut pour les six personnages, à version d'application égale — c'est bien la version et l'appareil que `tested_on` enregistre (R34), pas le compte.
+- **Aucune règle ne s'y applique** : ni caps, ni ratios, ni heures calmes, ni jour de repos, ni pool de commentaires, ni conformité de texte. On y tape et on y ouvre ce qu'on veut. Il ne publie jamais rien d'utile (au plus un média de test supprimé aussitôt), n'a ni fiche persona, ni bio, ni link-in-bio, ni UTM, et n'apparaît dans aucune mesure (`metrics-attribution.md`).
+- **Sacrificiel** : s'il est banni, on le remplace, et c'est tout. Pas de quarantaine de téléphone ni d'IP (le rayon d'un `suspended` de §3 ne vaut que pour les personnages), pas de post-mortem, aucun effet sur les règles collectives — ses signaux ne comptent jamais dans `red_accounts()` (`health-canaries.md` §4), sinon un écran d'exploration mettrait toute une plateforme en pause.
+- **Jamais dans le ledger** : `ledger.add_account()` le chaufferait, et `--role explorer` est refusé comme `--role observer` (E1.1). Son serial vit dans `FARM_EXPLORER_DEVICE` (`gitd/config.py`, E1.3) à côté de `FARM_OBSERVER_DEVICE`, et côté OFMAI dans une ligne `SocialAccount` `role = "explorer"`, `characterId = null` (`bridge-ofmai-farm.md` §3.1), pour l'inventaire seulement. **Le planificateur ne lui donne jamais de travail** : `planner.tick` ne connaît que les comptes du ledger.
+- **Jamais l'IP ni le téléphone d'un personnage, dans aucun sens** : on n'explore pas depuis chez un personnage, et un personnage n'hérite jamais de l'adresse de l'explorateur (R18, R36).
+- Facturation : téléphone dédié pendant la vérification des sélecteurs (vague 3), puis à la minute (§2) — il ne se rallume ensuite qu'à chaque mise à jour d'application (R34).
 
 ## 7. Installation des apps et compte Google
 
-Ordre, sur le proxy statique, le jour 0 (aucun compte social avant 24 h, `account-creation.md`) :
+Ordre, sur l'unique adresse du personnage (§4.1), le jour 0 (aucun compte social avant 24 h, `account-creation.md`) :
 
 1. Premier démarrage : vérifier langue `en-US`, fuseau, heure affichée = heure locale de l'IP.
 2. **Compte Google créé sur le téléphone** (Paramètres → Comptes → Ajouter) avec l'email du personnage — c'est l'email de toutes ses inscriptions (brief §4). Google demande souvent un numéro : c'est un checkpoint SMS avec un numéro réel du pool (`account-creation.md`, R25), jamais un numéro virtuel.
@@ -201,19 +202,19 @@ Ordre, sur le proxy statique, le jour 0 (aucun compte social avant 24 h, `accoun
 6. Versions : pas de mise à jour automatique des apps (`update_app()` existe, on ne l'appelle pas) ; une mise à jour se fait à la main, puis Skill Miner et `tested_on` (R34, `docs/FARM.md`). Le constat de version TikTok connu du code est `KNOWN_TIKTOK_VERSION = "44.3.3"` (`adb.py`) — la version installée sera plus récente, le warn est attendu.
 7. Contrôle : `GET /api/phone/health/<serial>` → `apps.*.installed = true`, `keyboard` = Gboard, `screen_on = true`.
 
-## 8. Coûts mensuels (6 personnages + 1 observateur)
+## 8. Coûts mensuels (6 personnages + 1 observateur + 1 explorateur)
 
 | Poste | Unité | Quantité | Mensuel |
 |---|---|---|---|
 | GeeLark, abonnement Base | 13 $/mois (revue GoLogin ; 5 $ selon une autre source) [à vérifier] | 1 | 13 $ |
-| GeeLark, téléphone dédié 24/7 | 29,9 $/tél (brief ; 24,90 + 5 $ Android 14 selon la revue) | 6 | 179,4 $ |
+| GeeLark, téléphone dédié 24/7 | 29,9 $/tél (brief ; 24,90 + 5 $ Android 14 selon la revue — les profils sont en Android 13, le supplément pourrait ne pas s'appliquer [à vérifier à l'achat]) | 6 | 179,4 $ |
 | GeeLark, observateur à la minute | 0,007 $/min, ≈ 10 min/jour | 1 | ≈ 2-3 $ |
-| IPRoyal, IP statique ISP US | 2,40 $/IP (90 j) | 7 | 16,8 $ |
-| IPRoyal, mobile collant | 5,20 $/Go ; ≈ 1 Go/personnage/mois (1-2 sessions de post/jour, un Reel ≈ 4 Mo) | ≈ 6 Go | ≈ 31 $ |
-| GeeLark + IPRoyal, profil « brand » (compte de marque, `personas.md` §7) — si retenu en vague 0 plutôt que le téléphone de Nathan | 29,9 $ + 2,40 $ | 0-1 | 0 ou ≈ 32 $ |
-| **Total** | | | **≈ 243 $/mois ≈ 40 $/personnage** (≈ 275 $ avec le profil brand) |
+| GeeLark, explorateur (§6.2) | dédié 29,9 $/mois pendant la vérification des sélecteurs (vague 3, ≈ 1 mois), puis à la minute (≈ 1 $/mois hors mise à jour d'app) | 1 | 29,9 $ puis ≈ 1 $ |
+| IPRoyal, IP statique ISP US, trafic illimité | 2,70 $/IP (30 j) | 8 (6 personnages + observateur + explorateur) | 21,6 $ |
+| GeeLark + IPRoyal, profil « brand » (compte de marque, `personas.md` §7) — si retenu en vague 0 plutôt que le téléphone de Nathan | 29,9 $ + 2,70 $ | 0-1 | 0 ou ≈ 33 $ |
+| **Total** | | | **≈ 218 $/mois ≈ 36 $/personnage** en régime établi (explorateur à la minute) ; **≈ 246 $** le mois de la vague 3, où l'explorateur est dédié ; ≈ 251 $ / ≈ 279 $ avec le profil brand |
 
-Avec les 7 téléphones en location 24/7 : ≈ 270 $/mois. Le plan Machine ×10 réserve « comptes/proxies 550 € » sur 21 jours (`documentation/business/growth/machine-x10-2026-09.md`) : l'infrastructure tient dedans, le contenu non (`content-pipeline.md` §9 : ≈ 210 à 720 $/mois de génération au besoin réel — 3 masters gardés par jour et par personnage —, jusqu'à ≈ 1 400 $/mois au plafond de production de 6 assets). Le coût par payant se calcule avec `metrics-attribution.md` §7.
+Le poste « mobile collant » a disparu (décision 3 du brief) : ≈ 31 $/mois en moins, et 2,40 $ était le tarif 90 jours, pas le tarif mensuel. Avec les 8 téléphones en location 24/7 : ≈ 274 $/mois. Le plan Machine ×10 réserve « comptes/proxies 550 € » sur 21 jours (`documentation/business/growth/machine-x10-2026-09.md`) : l'infrastructure tient dedans, le contenu non (`content-pipeline.md` §9 : ≈ 210 à 720 $/mois de génération au besoin réel — 3 masters gardés par jour et par personnage —, jusqu'à ≈ 1 400 $/mois au plafond de production de 6 assets). Le coût par payant se calcule avec `metrics-attribution.md` §7.
 
 ## 9. Pannes courantes
 
@@ -222,11 +223,11 @@ Avec les 7 téléphones en location 24/7 : ≈ 270 $/mois. Le plan Machine ×10 
 | Job `failed` avec `ADBError … device offline` / serial absent de `adb devices` ; le planner saute les slots (`LATE_TOLERANCE_MINUTES = 20`, jamais rattrapés) | coupure réseau Mac mini ↔ GeeLark, téléphone arrêté, ou `adb` local en vrac | `adb kill-server && adb start-server && adb devices` (`docs/TROUBLESHOOTING.md`) ; `geelark-cli phone start --ids …` si arrêté ; `adb connect` + `glogin` ; vérifier que `_try_wifi_reconnect` tourne (`GET /api/phone/devices`). Les sessions manquées **ne se rejouent pas** : le budget du jour reste tel quel (`farm_actions`) |
 | `unauthorized` ou commandes shell refusées après reconnexion | `glogin` non rejoué, code expiré | `geelark-cli phone adb get-info` → nouveau code → `adb -s … shell glogin …` [à vérifier : durée de validité du code] |
 | Serial changé (`ip:port` nouveau) | redémarrage du téléphone côté GeeLark | §5.3 (SQL `farm_accounts` + `phones`, registre local, `SocialAccount.deviceSerial`) |
-| Check proxy en échec, apps sans réseau, sessions en `error` avec `videos = 0` (`WarmSessionAction` → `success=False`) | proxy statique mort ou identifiants révoqués | **Ne jamais remplacer l'IP statique par une autre** (R18) : ticket IPRoyal, `accounts disable` sur tous les comptes du téléphone tant que le proxy n'est pas revenu, `accounts enable` ensuite. Le mobile n'est pas un pansement : au plus une session le temps d'une vérification urgente |
+| Check proxy en échec, apps sans réseau, sessions en `error` avec `videos = 0` (`WarmSessionAction` → `success=False`) | proxy statique mort ou identifiants révoqués | **Ne jamais remplacer l'IP statique par une autre** (R18) : ticket IPRoyal, `accounts disable` sur tous les comptes du téléphone tant que le proxy n'est pas revenu, `accounts enable` ensuite. Il n'existe aucune adresse de secours, et c'est voulu (§4.2) |
 | IPRoyal a changé l'IP statique derrière la même entrée | remplacement côté fournisseur | traiter comme un déménagement : attendre le signal `verification` éventuel (`_PATTERNS`, `health.py`), humain sur l'écran, `clear-health` ; noter la date dans `~/.ofmai/farm/phones.json` |
-| Session mobile tombée pendant un `post_video` | session collante expirée | le job finit `success=False` ; si « Share » a été tapé, `ambiguous=true` → `needs_human`, jamais de relance auto (`bridge-ofmai-farm.md` §7) ; revenir au statique |
-| Écran « Confirm it's you », « verify to continue », « add your phone number », « enter the 6-digit code » | vérification de la plateforme (`verification`, `apply_signal` → `VERIFICATION`, `can_run() = False`) | humain : flux vidéo, code SMS du pool réel, puis `python -m gitd.farm.cli accounts clear-health <platform> @<handle>` (R25, R26). Si l'écran est apparu juste après une bascule de proxy, c'est la bascule qui est en cause : ne plus basculer ce compte pendant 7 jours |
-| Fuseau ou GPS du téléphone ≠ `farm_accounts.timezone` | Auto-match rejoué après « Change proxy » sur un mobile d'un autre fuseau | corriger dans le profil (Custom) avant toute session ; le compte ne tourne pas tant que `getprop persist.sys.timezone` ≠ `--tz` (R20) |
+| Réseau tombé pendant un `post_video` | adresse ou lien ADB coupés en cours de job | le job finit `success=False` ; si « Share » a été tapé, `ambiguous=true` → `needs_human`, jamais de relance auto (`bridge-ofmai-farm.md` §7) |
+| Écran « Confirm it's you », « verify to continue », « add your phone number », « enter the 6-digit code » | vérification de la plateforme (`verification`, `apply_signal` → `VERIFICATION`, `can_run() = False`) | humain : flux vidéo, code SMS du pool réel, puis `python -m gitd.farm.cli accounts clear-health <platform> @<handle>` (R25, R26) |
+| Fuseau ou GPS du téléphone ≠ `farm_accounts.timezone` | Auto-match mal appliqué à la création du profil, ou profil recréé | corriger dans le profil (Custom) avant toute session ; le compte ne tourne pas tant que `getprop persist.sys.timezone` ≠ `--tz` (R20) |
 | Téléphone arrêté par GeeLark (plafond journalier atteint, abonnement échu, maintenance) ; proposition « New cloud phone » | facturation à la minute au lieu de la location, ou incident GeeLark | `phone start` ; vérifier le mode de facturation du profil ; **refuser « New cloud phone »** sur un profil en service (§3) ; si l'appareil est perdu, le personnage repart de zéro sur un nouveau profil et ses comptes sont abandonnés |
 | Token CLI refusé (`auth status` KO) | token révoqué, 2FA GeeLark | régénérer dans le dashboard GeeLark, `security add-generic-password … -U`, `geelark-cli config init` |
 | `/sdcard` plein, `post_video` « gallery item not found » | médias poussés par le pont non purgés | `adb -s … shell df /sdcard` ; purge de `/sdcard/DCIM/Camera/` hors session ; le pont doit supprimer après `posted` (`bridge-ofmai-farm.md` §6, étape 4) |
@@ -240,7 +241,9 @@ Toute panne qui laisse un compte hors service plus d'une heure remonte sur Disco
 - Profil nommé `<slug>-us`, modèle unique, Android fixé, Auto-match sur l'IP statique ; Check proxy vert, ville et État attendus.
 - `getprop persist.sys.timezone` = `--tz` du `accounts add` ; `persist.sys.locale` = `en-US`.
 - ADB relié (`adb devices` → `device`), `glogin` fait, `phones.nickname` posé, `GET /api/phone/health/<serial>` : quatre apps installées, Gboard, écran allumé.
-- Entrées Trousseau `ofmai-proxy-<slug>-static` et `-mobile` créées ; ligne dans `~/.ofmai/farm/phones.json` ; rien de tout ça dans le repo ni dans `farm_accounts.notes`.
+- Entrée Trousseau `ofmai-proxy-<slug>-static` créée (une seule par personnage) ; ligne dans `~/.ofmai/farm/phones.json` ; rien de tout ça dans le repo ni dans `farm_accounts.notes`.
 - `DEFAULT_DEVICE` = serial de l'observateur, jamais d'un personnage.
-- 24 h de vie sur le proxy statique avant la première inscription (`account-creation.md`) ; le compte n'entre dans le ledger qu'après (`created_on` = jour 1 de `phase_for_day()`).
-- Le premier « Change proxy » vers le mobile n'a lieu qu'à la création du premier compte, hors `QUIET_HOURS`, sans job en cours.
+- Avant la vague 3 seulement : profil `explorer-us` créé avec sa propre adresse (§6.2), ses quatre comptes sacrificiels ouverts à la main, `FARM_EXPLORER_DEVICE` posé ; aucune session de chauffe n'y tourne et aucun écran des applications n'est exploré depuis le téléphone d'un personnage (R36).
+- `netType` = 0 (Wi-Fi) sur le profil : le téléphone ne se déclare jamais en réseau mobile derrière une adresse résidentielle fixe (§3).
+- 24 h de vie sur l'adresse du personnage avant la première inscription (`account-creation.md`) ; le compte n'entre dans le ledger qu'après (`created_on` = jour 1 de `phase_for_day()`).
+- Aucun « Change proxy » n'est prévu, ni le jour 0 ni jamais (§4.2).

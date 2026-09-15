@@ -1,0 +1,82 @@
+name: ofmai_signup_instagram
+display_name: OFMAI Instagram signup
+description: >-
+  Creates one Instagram account on a character's own phone, by email, with a
+  human at every gate (email code, password, captcha, SMS). Day 1 of the warming
+  policy — docs/social/account-creation.md §6.1.
+version: "0.1.0"
+kind: hard
+app_package: com.instagram.android
+android_package: com.instagram.android
+platforms:
+  - android
+author: OFMAI
+license: MIT
+
+# Read by gitd/skills/_run_skill.py: with this key the recorded steps run through
+# gitd/farm/signup.GuardedRecordedWorkflow, which re-reads the screen after each
+# step and stops the run on a suspension (health.py) or on an identity check
+# (account-creation.md §9). Without the key, nothing changes for any other skill.
+health_platform: instagram
+
+# Parameters (account-creation.md §4.1). All of them are public text: an email
+# address, a handle, a display name, a date, three bio lines copied from the
+# persona sheet. The password is NEVER a parameter — _run_skill.py writes
+# params_json into skill_runs, an unencrypted SQLite behind an unauthenticated
+# REST port (R9). It is typed by a human at the `login` checkpoint, read from the
+# Keychain entry ofmai-social-instagram-<slug>.
+exports:
+  workflows:
+    - name: recorded
+      description: Instagram signup by email, human gates
+      params:
+        email: { type: string, required: true }
+        handle: { type: string, required: true }
+        name: { type: string, required: true }
+        birthday: { type: string, required: true, description: "YYYY-MM-DD, 18+ (R2)" }
+        bio_line1: { type: string, required: true, description: "persona sheet, ASCII, no link (R12, R22)" }
+        bio_line2: { type: string, required: true }
+        bio_line3: { type: string, required: true }
+
+# Optional screens live here, not in the steps: a `tap` whose locator is missing
+# fails the whole run, so anything that may or may not appear (the phone-number
+# Skip, the contact sync, the follow suggestions) is dismissed by a detector.
+# That is also how account-creation.md §6.1's "tap Skip if it exists, otherwise
+# a `sms` checkpoint" is expressed: the detector takes the Skip when there is
+# one, and the checkpoint that follows catches the case where there is not.
+popup_detectors:
+  - detect: "Turn on Notifications"
+    button: "Not Now"
+    label: "Notifications popup"
+  - detect: "Save Your Login Info"
+    button: "Not Now"
+    label: "Save login popup"
+  - detect: "Allow Instagram to access"
+    button: "Don’t allow"
+    label: "Permission request"
+  - detect: "Add Instagram to your Home screen"
+    button: "Not now"
+    label: "Home screen shortcut"
+  - detect: "Add your phone number"
+    button: "Skip"
+    label: "Phone number screen — Skip when offered (else the sms checkpoint)"
+  - detect: "Find people to follow"
+    button: "Skip"
+    label: "Follow suggestions — never a follow at creation (R16)"
+  - detect: "Connect to Facebook"
+    button: "Skip"
+    label: "Facebook linking"
+  - detect: "Sync contacts"
+    button: "Not now"
+    label: "Contact sync"
+  - detect: "Update Instagram"
+    button: "Not Now"
+    label: "Update nag"
+
+# Health signals are NOT dismissed here: gitd/farm/signup.guard_screen ends the
+# run on a suspension or an identity check.
+
+# R34 — empty until Skill Miner has walked these screens on the first phone.
+# Every step also carries "verified": false; gitd/farm/signup.ready_for_real_run()
+# refuses the skill while either is true.
+tested_on: []

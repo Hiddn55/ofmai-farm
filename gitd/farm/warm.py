@@ -32,7 +32,20 @@ class LedgerLike(Protocol):
 
 
 class PlatformAdapter(Protocol):
-    """What a skill must provide. Every method may raise; the loop copes."""
+    """What a skill must provide. Every method may raise; the loop copes.
+
+    One method is **optional** and is never called by :func:`run_session`:
+
+        ``read_karma(self) -> int | None``
+
+    It opens the account's *own* profile, reads the number with
+    :func:`parse_karma` and comes back to the feed. ``WarmSessionAction`` calls
+    it at the end of a session (``gitd/farm/skillkit.py``) and attaches the
+    result to the ``session_summary`` event: OFMAI serves no Reddit publication
+    below 100 karma (``docs/social/publishing.md`` §5) and that number exists
+    nowhere else. An adapter without the hook simply reports nothing, and the
+    account stays out of the Reddit queue for a stated reason.
+    """
 
     platform: str
 
@@ -95,6 +108,11 @@ class SessionStats:
     seconds: float = 0.0
     health: str | None = None
     error: str | None = None
+    # Texts actually posted, reported back to OFMAI so the pool can retire them
+    # (bridge-ofmai-farm.md §4.1): a comment is drawn at random from the list, so
+    # the order is not predictable without saying which ones were used.
+    comments_used: list[str] = field(default_factory=list)
+    replies_used: list[str] = field(default_factory=list)
 
     def as_dict(self) -> dict:
         return {k: v for k, v in self.__dict__.items()}
@@ -196,6 +214,9 @@ def run_session(
                 if adapter.comment(text):
                     ledger.record(policy.COMMENT)
                     stats.comments += 1
+                    # Only a text that really went through is consumed; anything
+                    # else returns to the pool when its reservation expires.
+                    stats.comments_used.append(text)
                 cxml = adapter.dump()
                 if check_health(cxml):
                     break
@@ -268,3 +289,62 @@ def center(node: str) -> tuple[int, int] | None:
         return None
     x1, y1, x2, y2 = map(int, m.groups())
     return (x1 + x2) // 2, (y1 + y2) // 2
+
+
+# ── Reddit karma, read on screen ─────────────────────────────────────────────
+#
+# OFMAI refuses to serve a Reddit publication below 100 karma
+# (docs/social/publishing.md §5) and no event carried that number until now: the
+# gate was stuck shut. The only place it exists is the account's own profile
+# screen, so an adapter reads it there (optional ``read_karma`` hook of
+# PlatformAdapter) and ``skillkit`` puts it on the ``session_summary`` event.
+
+_KARMA_SCALE = {"k": 1_000, "m": 1_000_000, "b": 1_000_000_000}
+#: "247", "1,234", "1.2" + "k" — digits and suffix captured apart.
+_NUMBER = r"(\d+(?:[.,]\d+)*)\s*([kmb])?"
+#: the profile header: "1.2k karma", "247 karma"
+_KARMA_TOTAL = re.compile(_NUMBER + r"\s*karma\b", re.IGNORECASE)
+#: the detailed rows: "Post karma 1.2k", "Comment karma: 340"
+_KARMA_LABELLED = re.compile(r"\b(post|comment|link)\s+karma\b\D{0,3}" + _NUMBER, re.IGNORECASE)
+
+
+def _karma_number(raw: str, suffix: str | None) -> int | None:
+    """``"1,234"`` -> 1234, ``"1.2" + "k"`` -> 1200. None when it is not a number."""
+    cleaned = raw.replace(",", "").strip()
+    if not cleaned:
+        return None
+    try:
+        if suffix:
+            return int(float(cleaned) * _KARMA_SCALE[suffix.lower()])
+        # No suffix: a dot can only be a thousands separator here (en-US Reddit
+        # writes "1,234"), never a fraction of a karma point.
+        return int(cleaned.replace(".", ""))
+    except ValueError:
+        return None
+
+
+def parse_karma(xml: str) -> int | None:
+    """Total karma shown on a Reddit profile screen, or None when it is absent.
+
+    The **caller** guarantees the screen is the account's *own* profile: every
+    other profile shows someone else's karma, and ``open_author`` spends the
+    whole session on exactly those. A combined "N karma" wins; failing that, the
+    sum of the labelled "post karma" / "comment karma" rows.
+    """
+    if not xml:
+        return None
+    labelled: dict[str, int] = {}
+    for node in _NODE.findall(xml):
+        haystack = f"{_text_of(node)} {desc_of(node)}"
+        if "karma" not in haystack.lower():
+            continue
+        for kind, raw, suffix in _KARMA_LABELLED.findall(haystack):
+            value = _karma_number(raw, suffix or None)
+            if value is not None:
+                labelled.setdefault("post" if kind.lower() == "link" else kind.lower(), value)
+        match = _KARMA_TOTAL.search(haystack)
+        if match:
+            total = _karma_number(match.group(1), match.group(2) or None)
+            if total is not None:
+                return total
+    return sum(labelled.values()) if labelled else None

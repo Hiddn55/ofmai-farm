@@ -1,10 +1,10 @@
 # Politique de chauffe — ce qu'un compte a le droit de faire chaque jour de sa vie
 
 > **Nature** : reference
-> **Statut** : en vigueur — §1 à §7 et §9 sont recopiés du code au 2026-09-14 ; §8, §10 et §11 sont des décisions que le code n'applique pas encore (tâches dans `build-plan.md`)
-> **À jour au** : 2026-09-14
-> **Répond à** : quels plafonds, quels rythmes et quels gestes gouvernent la chauffe d'un compte de personnage, ce qui arrête une session, et quand un compte passe en production (`api_mode`)
-> **Code concerné** : fork ofmai-farm `gitd/farm/policy.py` (source des chiffres), `gitd/farm/warm.py`, `gitd/farm/human.py`, `gitd/farm/ledger.py`, `gitd/farm/planner.py`, `gitd/farm/skillkit.py`, `gitd/farm/health.py`, `gitd/farm/cli.py`, `gitd/skills/ofmai_instagram/actions/core.py`, `gitd/skills/ofmai_tiktok/actions/core.py`, `gitd/skills/ofmai_instagram/workflows/__init__.py`, `gitd/skills/ofmai_tiktok/workflows/__init__.py`, `tests/test_farm_policy.py`, `tests/test_farm_warm.py` ; OFMAI : `SocialCommentPool` (`bridge-ofmai-farm.md`, à créer)
+> **Statut** : en vigueur — §1 à §7 et §9 sont recopiés du code au 2026-09-14, à une exception près, signalée sur place : la provenance des requêtes du détour de recherche (§7, étape 7) est la décision de §8.2 ; §8, §10 et §11 sont des décisions que le code n'applique pas encore (tâches dans `build-plan.md`)
+> **À jour au** : 2026-09-15
+> **Répond à** : quels plafonds, quels rythmes et quels gestes gouvernent la chauffe d'un compte de personnage, d'où viennent les commentaires et les comptes qu'il suit, ce qui arrête une session, et quand un compte passe en production (`api_mode`)
+> **Code concerné** : fork ofmai-farm `gitd/farm/policy.py` (source des chiffres), `gitd/farm/warm.py`, `gitd/farm/human.py`, `gitd/farm/ledger.py`, `gitd/farm/planner.py`, `gitd/farm/skillkit.py`, `gitd/farm/health.py`, `gitd/farm/cli.py`, `gitd/skills/ofmai_instagram/actions/core.py`, `gitd/skills/ofmai_tiktok/actions/core.py`, `gitd/skills/ofmai_instagram/workflows/__init__.py`, `gitd/skills/ofmai_tiktok/workflows/__init__.py`, `tests/test_farm_policy.py`, `tests/test_farm_warm.py` ; OFMAI : `TrackedInfluencer` (radar, source des cibles de §8.2), `SocialCommentPool` et `SocialTargetUse` (`bridge-ofmai-farm.md`, à créer)
 
 `gitd/farm/policy.py` porte en docstring « Mirrors docs/social/warming-policy.md » : ce fichier et ce module disent la même chose ; s'ils divergent, on corrige l'un ou l'autre dans le même commit, et `sh scripts/farm_tests.sh` est la preuve exécutable. Les chiffres sont des **plafonds**, jamais des cibles. Ce que l'appareil, le proxy et le compte doivent être avant le jour 1 : `account-creation.md`, `infrastructure-geelark-proxies.md`. Ce qui se publie et par où : `publishing.md`. Signaux collectifs et canaris : `health-canaries.md`. Règles absolues : `rules.md`.
 
@@ -72,7 +72,7 @@ Le budget vit dans le ledger, pas dans un prompt (R13) : `FarmSession.record()` 
 - **Fenêtres** : `_WINDOWS = [(8, 12), (12, 15), (18, 23), (15, 18)]`, prises dans cet ordre (2 sessions = matin + midi ; 3 = + soir ; 4 = + après-midi), puis un départ uniforme dans la fenêtre **décalé de −90 à +90 min**, borné à 07:05-23:40. Aucune journée ne ressemble à la veille (`test_sessions_avoid_quiet_hours_and_vary_by_day` : plus de 15 heures de départ distinctes sur 26 jours).
 - **Durées** : les minutes du jour sont réparties par poids log-normaux (σ = 0,5) ; 10 % des sessions deviennent un « coup d'œil » de 1-2 min.
 - **Espacement** : au moins 45 min entre la fin d'une session et le début de la suivante (+0 à 30 min tirés) ; une session repoussée après minuit est supprimée.
-- **Heures calmes** : `QUIET_HOURS = range(1, 7)` → rien entre 01:00 et 06:59 locale, ni session, ni post, ni bascule de proxy (R15, R19). Un départ tombant dedans est ramené à 07:05-07:55.
+- **Heures calmes** : `QUIET_HOURS = range(1, 7)` → rien entre 01:00 et 06:59 locale, ni session, ni post (R15). Un départ tombant dedans est ramené à 07:05-07:55.
 
 Le planner (`python -m gitd.farm.cli daemon`, `planner.tick` chaque 60 s) enfile un job Ghost `skill_workflow` (`priority = 2`, `trigger = "farm"`, `max_duration_s = (minutes + GRACE_MINUTES 10) × 60`) quand `start ≤ now ≤ start + LATE_TOLERANCE_MINUTES (20)` ; un créneau plus vieux est **sauté, jamais rattrapé** (rattraper a l'air robotique). Un créneau = une clé `farm_planned.slot_key = "<account_id>:<start>"`, donc un redémarrage ne double jamais une session. Le scheduler Ghost tient un seul job actif par téléphone et tue le job au-delà de `max_duration_s` (SIGTERM puis SIGKILL). `WarmSessionAction` reçoit `minutes` du créneau ; à 0 (lancement manuel `run`), il prend `session_minutes / sessions`.
 
@@ -95,9 +95,9 @@ Un jour par semaine ISO, choisi par `sha256("rest|<account_key>|<année, semaine
 2. **Regarder** (`human.watch()`) : 10-28 % de vidéos zappées en 0,6-1,5 s ; 4-14 % de « lingering » 12-60 s ; le reste 1,5-20 s autour de 4-9 s. Une ligne `farm_actions` `view`.
 3. **Liker** : propension de la phase × `allow(LIKE)` ; les deux skills double-tapent la vidéo 6 fois sur 10, sinon le bouton « Like » ; jamais de dé-like (« Liked » / « Unlike » présent → rien).
 4. **Enregistrer** : Instagram « More options » → « Save » ; TikTok « Favorites ».
-5. **Visiter le profil de l'auteur** (`open_author`), lire la bio (`pause(2.5)`), nouveau contrôle santé, **follow** seulement ici et seulement si `allow(FOLLOW)` ; retour au feed.
+5. **Visiter le profil de l'auteur** (`open_author`), lire la bio (`pause(2.5)`), nouveau contrôle santé, **follow** seulement ici et seulement si `allow(FOLLOW)` ; retour au feed. C'est la branche « auteur du feed », inchangée ; les profils tirés du radar entrent, eux, par le détour de recherche (§8.2).
 6. **Commenter** : un texte tiré au hasard du pool (`comments.pop(...)`, jamais deux fois le même dans la session), pause « réflexion » `1.5`, saisie caractère par caractère (ASCII pur, R12), contrôle santé après. Sans pool, la branche n'existe pas.
-7. **Détour** toutes les `DETOUR_EVERY = (12, 30)` vidéos : `search` (Instagram : onglet Search, `#<niche>`, Entrée, 1-3 défilements de 1,5-4 s ; TikTok : loupe, requête sans `#`) compte un `search` ; `stories` (Instagram seulement : Home, une story qui n'est pas « Your story », 2-6 taps de 2-6 s) compte un `story_view`. La requête vient de `niche` (`farm_accounts.niche` = `hashtags_niche` de la fiche, ex. `gymgirl,fitnessmotivation,losangeles,morningroutine` pour `sierra`).
+7. **Détour** toutes les `DETOUR_EVERY = (12, 30)` vidéos : `search` (Instagram : onglet Search, requête, Entrée, 1-3 défilements de 1,5-4 s ; TikTok : loupe, requête sans `#`) compte un `search` ; `stories` (Instagram seulement : Home, une story qui n'est pas « Your story », 2-6 taps de 2-6 s) compte un `story_view`. **Deux recherches sur trois visent un compte du radar** de la niche du personnage (§8.2), la troisième reste un hashtag de `niche` (`farm_accounts.niche` = `hashtags_niche` de la fiche, ex. `gymgirl,fitnessmotivation,losangeles,morningroutine` pour `sierra`) — c'est le comportement d'aujourd'hui, conservé parce qu'une session qui ne cherche que des pseudos est elle-même une signature.
 8. **Poser le téléphone** : `PHONE_DOWN_RATE = 0.03` par vidéo, `PHONE_DOWN_S = (20.0, 90.0)` secondes sans rien faire.
 9. **Vidéo suivante** : swipe vertical avec dérive latérale, amplitude 40-68 % de l'écran, 150-1 200 ms — jamais un `input tap` nu (`test_instagram_warm_session_runs_against_fake_device`).
 
@@ -120,7 +120,9 @@ Propensions par phase (`PROPENSITY`, avant le oui/non du ledger) :
  "handle": "sierra.cole", "day_of_life": 20, "phase": "cruise", "profile_seed": 733120544}
 ```
 
-## 8. Pools de commentaires par persona
+## 8. Ce que la plateforme sert à une session : commentaires et cibles du radar
+
+### 8.1 Pools de commentaires par persona
 
 Le code attend `params.comments` (ASCII, un par ligne, `WarmSessionAction`), mais `planner.job_config` ne passe que `handle`, `minutes`, `niche` : **aujourd'hui aucune session ne commente**. Le pool vit côté OFMAI (`SocialCommentPool` : `characterId`, `platform`, `text`, `reservedUntil`, `usedAt`, `usedByHandle`), est servi par `GET /api/farm/comments?character_id=…&platform=…&n=10` et remonte dans `session_summary.comments_used` (`bridge-ofmai-farm.md` §3.4, §4.1).
 
@@ -146,6 +148,31 @@ that gym is spotless
 the tempo on those reps
 rest day earned after this
 ```
+
+### 8.2 Comptes à suivre et profils à visiter : le radar, par niche
+
+**Décision (2026-09-15)** : pendant la chauffe, les comptes qu'un personnage suit et les profils qu'il visite ne sont plus ce que le hasard d'un hashtag lui met sous la main — ils sont **tirés du radar d'OFMAI, pour la niche du personnage**.
+
+Aujourd'hui, la session cherche `#<niche>` et suit ce qui tombe (§7, étapes 5 et 7) : le voisinage d'un compte neuf est alors le produit d'une page de hashtag, où se mélangent spam, comptes morts et gros comptes hors sujet. Or la plateforme possède déjà **≈ 2 900 comptes d'influenceuses classés par niche** (`TrackedInfluencer`, champ `niche`, avec les six libellés exacts des personnages : 160 comptes en `fitness`, 191 en `latina`, 147 en `asiatique`, 211 en `bimbo`, 157 en `e-girl`, 107 en `gothique` — `personas.md` §3.1). C'est plus crédible qu'un hashtag, et ça place le personnage dans le bon voisinage dès le premier jour, ce qui aide l'algorithme à le catégoriser.
+
+| | Règle |
+|---|---|
+| Source | `TrackedInfluencer` où `niche` = `niche.radar` de la fiche persona (`personas.md` §1), `market = "US"`, `status = "active"`, `enabled = true` |
+| Qui sert | OFMAI, `GET /api/farm/targets?character_id=…&platform=…&n=…` (`bridge-ofmai-farm.md` §3.7) ; le pont les met en cache et le planner les passe dans `params.targets`, exactement comme `params.comments` (§8.1) |
+| Où ça entre dans la session | le **détour de recherche** (§7, étape 7) : deux recherches sur trois tapent le pseudo d'une cible au lieu d'un hashtag, ouvrent son profil, lisent la bio, font défiler la grille. Cela consomme un `search` et un `profile_visit` ; le **follow** n'a lieu que si `allow(FOLLOW)` passe, ratio ≤ 30 % des visites tenu comme partout (§3) |
+| Ce qui ne change pas | la branche « auteur du feed » (§7, étape 5) : le reste du budget `profile_visit` et `follow` continue d'y passer. Au bout de quelques jours, le feed lui-même est devenu celui de la niche |
+| Volume | plafond `searches` 2 / 3 / 4 / 5 par phase, donc **5 cibles par jour au plus** : une niche de 107 à 211 comptes couvre le mois de chauffe entier, ce qui est exactement ce qu'on lui demande |
+| À égalité | `accountType = "reelle"` d'abord — l'inverse de la sélection de **contenu**, qui préfère `"ia"` (`content-pipeline.md` §4.1) : on reproduit une scène plus facilement depuis un compte IA, mais on ne se construit pas un voisinage fait de clones |
+| Jamais deux fois | une cible servie à un compte ne l'est plus jamais avant 90 jours (`SocialTargetUse`, `@@unique([socialAccountId, handle])`, `bridge-ofmai-farm.md` §5.1) ; réservation 24 h à la livraison, rendue si la session ne l'a pas consommée |
+| Consommation | remontée dans le résumé de session : `targets_used: [handle…]`, à côté de `comments_used` (`bridge-ofmai-farm.md` §4.1) |
+| Pool épuisé | la route rend une liste vide et le détour retombe sur le hashtag de niche : le comportement d'aujourd'hui est le repli, jamais une erreur |
+
+Limites, assumées et à surveiller :
+
+- **Le radar n'indexe qu'Instagram** (`TrackedInfluencer.platform`, défaut `instagram`). Sur **TikTok** et **X**, la cible est servie comme une *requête de recherche* (le pseudo) : si l'application ne rend rien, la session retombe sur le hashtag [à vérifier sur les 20 premières cibles : taux de recouvrement des pseudos entre Instagram, TikTok et X]. Sur **Reddit**, la route rend toujours une liste vide — il n'y a pas d'influenceuse à suivre, le détour `r/<niche>` puis l'onglet `Hot` reste la règle (§7, paragraphe X et Reddit).
+- Suivre une cible ne veut pas dire la commenter : les commentaires restent tirés du pool (§8.1) et ne mentionnent jamais OFMAI ni l'IA sur le contenu d'un autre (R22).
+- On ne suit **jamais en masse** : la cible ne change rien aux caps ni aux ratios, et le premier « action blocked » arrête tout (R16, incident @potter_society).
+- Le radar est une liste de comptes, pas de personnes à imiter : R1 tient — un compte du radar donne un voisinage, un post du radar donne une scène, jamais un visage.
 
 ## 9. Santé : machine d'états et effets sur la phase
 

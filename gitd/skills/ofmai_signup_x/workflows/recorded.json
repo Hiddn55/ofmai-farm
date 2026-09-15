@@ -1,0 +1,113 @@
+[
+  {
+    "action": "launch",
+    "package": "com.twitter.android",
+    "description": "Launch X on the character's phone",
+    "goal": "Day 5 of the phone; Instagram and TikTok are already warming",
+    "verified": false
+  },
+  { "action": "wait", "seconds": 8, "description": "Cold start", "verified": false },
+  { "action": "tap", "text": "Create account", "description": "Start a signup [to verify]", "verified": false },
+  { "action": "tap", "text": "Name", "description": "Focus the name field [to verify]", "verified": false },
+  {
+    "action": "type",
+    "text": "{name}",
+    "description": "Display name — nothing suggestive: name, bio, avatar and banner all show outside the sensitive-media setting (personas.md §6)",
+    "verified": false
+  },
+  {
+    "action": "tap",
+    "text": "Use email instead",
+    "description": "X offers a phone number first; the signup is by email everywhere [to verify]",
+    "verified": false
+  },
+  { "action": "tap", "text": "Email", "description": "Focus the email field [to verify]", "verified": false },
+  { "action": "type", "text": "{email}", "description": "The character's own Gmail, created at J0", "verified": false },
+  {
+    "action": "checkpoint",
+    "reason": "generic",
+    "prompt": "Set the birthday {birthday} on the wheel. It must be 18+ or X never offers the sensitive-media settings this account needs. Tap Next, then resume.",
+    "timeout_s": 0,
+    "description": "Birthday",
+    "verified": false
+  },
+  {
+    "action": "checkpoint",
+    "reason": "email",
+    "prompt": "Read the code for {email} in the Gmail notification (GET /api/phone/notifications/<serial>) and type it on the device (POST /api/phone/type). Do not open Gmail. Then resume.",
+    "timeout_s": 0,
+    "description": "Email code",
+    "verified": false
+  },
+  {
+    "action": "checkpoint",
+    "reason": "login",
+    "prompt": "Type the X password for {handle} on the device. Read it from the Keychain (ofmai-social-x-<slug>) and type it with POST /api/phone/type; it is never a parameter of this run (R9). We enable no 2FA of our own: the session lives on one phone that never logs out. If X forces 2FA, choose email — that is another `email` checkpoint. Then resume.",
+    "timeout_s": 0,
+    "description": "Password — typed by a human",
+    "verified": false
+  },
+  { "action": "tap", "text": "Username", "description": "Focus the username field [to verify]", "verified": false },
+  { "action": "type", "text": "{handle}", "description": "Handle 1 of the persona sheet", "verified": false },
+  { "action": "tap", "text": "Next", "description": "Submit the username [to verify]", "verified": false },
+  {
+    "action": "checkpoint",
+    "reason": "generic",
+    "prompt": "If the username is taken, clear it and type fallback handle 2, then 3, from the persona sheet — and update the sheet. Then resume.",
+    "timeout_s": 0,
+    "description": "Username availability",
+    "verified": false
+  },
+  {
+    "action": "checkpoint",
+    "reason": "captcha",
+    "prompt": "'Authenticate your account': solve the puzzle by hand — never by an agent, never by a solving service (R25). Three failures in a row end the day. Then resume.",
+    "timeout_s": 0,
+    "description": "Captcha — expected on X (account-creation.md §6.3)",
+    "verified": false
+  },
+  {
+    "action": "checkpoint",
+    "reason": "generic",
+    "prompt": "Account suggestions: skip them. X sometimes refuses to move on without one follow. If it does, stop here and abort the run rather than follow: no follow exists at creation (R16), and an account whose first action is a forced follow starts in the wrong place. Otherwise resume.",
+    "timeout_s": 0,
+    "description": "Follow suggestions — the one screen where abort is the right answer",
+    "verified": false
+  },
+  {
+    "action": "checkpoint",
+    "reason": "generic",
+    "prompt": "18+ settings, BEFORE the first post. Settings and privacy > Privacy and safety > Content you see > 'Display media that may contain sensitive content' ON. Then Your posts > 'Mark media you post as having material that may be sensitive' ON. [labels to verify] Both, or the account's own posts get hidden from it and from everyone. Then resume.",
+    "timeout_s": 0,
+    "description": "The two sensitive-media settings (account-creation.md §6.3)",
+    "verified": false
+  },
+  { "action": "tap", "content_desc": "Profile", "description": "Profile tab [to verify]", "verified": false },
+  { "action": "tap", "text": "Edit profile", "description": "Open the profile editor [to verify]", "verified": false },
+  {
+    "action": "checkpoint",
+    "reason": "generic",
+    "prompt": "Profile picture: pick the MOST RECENT gallery item — the watermarked variant pushed with adb push minutes ago. Nothing suggestive in the avatar or the banner: both show outside the sensitive-media setting. Confirm, come back to the editor, then resume.",
+    "timeout_s": 0,
+    "description": "Avatar",
+    "verified": false
+  },
+  { "action": "tap", "text": "Bio", "description": "Focus the bio field [to verify]", "verified": false },
+  {
+    "action": "type",
+    "text": "{bio}",
+    "description": "X bio of the persona sheet — ASCII, '18+' whether the character is declared or not (R2), no link before the first post (R22)",
+    "verified": false
+  },
+  { "action": "tap", "text": "Save", "description": "Save the profile [to verify]", "verified": false },
+  { "action": "tap", "content_desc": "Profile", "description": "Back to the profile [to verify]", "verified": false },
+  {
+    "action": "checkpoint",
+    "reason": "generic",
+    "prompt": "Last look: the profile shows {handle}, the bio and the picture, no link, and both sensitive-media settings are on. Register it on the Mac mini the same day — accounts add x @{handle} --device <serial> --tz <persona tz> --created-on <today> — then resume to close the run. The reddit-style script app and the OAuth tokens come later, never today.",
+    "success": { "screen_has": "{handle}" },
+    "timeout_s": 0,
+    "description": "The run ends on the profile screen showing {handle}",
+    "verified": false
+  }
+]

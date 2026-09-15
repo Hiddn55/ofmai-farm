@@ -70,6 +70,67 @@ _PATTERNS: dict[str, dict[str, list[str]]] = {
             r"community guidelines violation",
         ],
     },
+    # X and Reddit patterns are written from the en-US strings both apps show
+    # today; none has been seen on a device yet. Verify them with Skill Miner
+    # before the first real run (R34) and widen or narrow here, never in a
+    # prompt. A suspension costs a 30-day quarantine of the phone AND its exit
+    # IP, so every "suspended" pattern names the account explicitly: a post in
+    # the feed containing the bare word "suspended" must never match.
+    "x": {
+        "action_blocked": [
+            r"rate limit",
+            r"over the daily limit",
+            r"you are unable to follow more people",
+            r"something went wrong. try reloading",
+        ],
+        "verification": [
+            r"suspicious activity",
+            r"your account is locked",
+            r"confirm your identity",
+            r"verify your (phone|email|identity)",
+            r"enter the code we sent",
+        ],
+        "logged_out": [
+            r'text="log in"',
+            r'content-desc="log in"',
+            r"create your account",
+            r"sign up for x",
+        ],
+        "suspended": [
+            r"(your )?account (is|has been|was) suspended",
+            r"we suspended your account",
+            r"x suspends accounts",
+        ],
+    },
+    "reddit": {
+        # A subreddit ban ("banned from participating") is not a platform-wide
+        # suspension: docs/social/health-canaries.md S6 treats it as an action
+        # block (48 h) plus a strike on that sub, decided on the OFMAI side.
+        "action_blocked": [
+            r"you.?ve been doing that a lot",
+            r"you are doing that too much",
+            r"rate limit",
+            r"banned from participating",
+            r"try again in \d+ (second|minute|hour)",
+        ],
+        "verification": [
+            r"verify your email",
+            r"verify your account",
+            r"we need to verify",
+            r"enter the (code|verification code)",
+        ],
+        "logged_out": [
+            r'text="log in"',
+            r'content-desc="log in"',
+            r"sign up to continue",
+            r"log in to reddit",
+        ],
+        "suspended": [
+            r"(your |this )?account (is|has been|was) suspended",
+            r"we.?ve suspended your account",
+            r"account (permanently|temporarily) suspended",
+        ],
+    },
 }
 
 # Signals that need attention in this order (most severe first)

@@ -1,8 +1,8 @@
 # Personas — fiche, six personnages, Fanvue, link-in-bio, bios, compte de marque
 
 > **Nature** : reference
-> **Statut** : à vérifier — format écrit avant le build : aucune fiche n'est lue par du code, aucune page `/c/<slug>`, aucune route `app/api/farm/personas/*` n'existe ; `AICharacter.publicSlug` et `isPublic` sont absents de `prisma/schema.prisma` (vérifié le 2026-09-14) ; les six personnages (noms, pseudos, bios, villes) et la répartition `disclosed` sont des propositions à valider par Nathan
-> **À jour au** : 2026-09-14
+> **Statut** : en vigueur — vagues 1 et 2 construites le 2026-09-15. Existent : côté ferme `gitd/farm/*.py`, les skills `ofmai_{instagram,tiktok,x,reddit}` et `ofmai_signup_*`, le pont et les règles collectives (390 tests) ; côté OFMAI `lib/social/*`, `app/api/farm/*`, `app/api/admin/social/*`, les six fiches persona et le schéma de la banque (350 tests). Restent à faire : la vérification des sélecteurs sur un appareil (E4, aucun `tested_on` rempli), les pages publiques, le comment-to-DM, et les trois tâches de cibles radar E3.7 / E7.5 / E7.6.
+> **À jour au** : 2026-09-15
 > **Répond à** : qui sont les six personnages de M1, à quoi ressemble leur fiche, lesquels se déclarent IA et où, où pointent leurs liens, comment ils se présentent sur chaque plateforme et sur Fanvue, et où tout cela vit dans le repo
 > **Code concerné** : `lib/social/personas/*.yaml` et `lib/social/personas.ts` (à créer), `app/c/[slug]/page.tsx` (à créer), `app/api/farm/personas/[characterId]/route.ts` (à créer), `prisma/schema.prisma` (`AICharacter` — `publicSlug` et `isPublic` à ajouter —, `TrackedInfluencer`, `ScrapedPost` ; `SocialAccount` et `SocialCommentPool` à créer), `lib/core/admin-guard.ts`, `lib/core/host.ts`, `lib/analytics/utm.ts`, `lib/radar/niche-labels.ts`, `lib/characters/character-create-catalog.ts`, `app/api/admin/instagram/replicate-image/route.ts`, `app/api/admin/instagram/replicate-video/route.ts`, `lib/billing/pricing.ts`, `app/[seoLanding]/page.tsx`, `app/api/auth/[...nextauth]/route.ts`, `app/layout.tsx` ; fork `gitd/farm/models.py`, `gitd/farm/human.py`
 
@@ -15,10 +15,11 @@ Un fichier YAML par personnage, `slug` = `utm_content` = `/c/<slug>` = nom du fi
 | Bloc | Champs | Qui le lit |
 |---|---|---|
 | `slug`, `ofmai` | `character_id`, `soul_id`, `lora_name`, `trigger_word` (= colonnes `AICharacter`) | banque `ContentAsset`, pont |
-| `identity` | `name`, `age`, `origin`, `city`, `timezone` (= `farm_accounts.timezone`), `market`, `language`, `disclosed`, `disclosed_since`, `signature` (2 traits + 1 trait décalé), `backstory` ≤ 80 mots, `visual_anchor`, `brand_colors` | légendes, réponses, page publique |
+| `identity` | `name`, `age`, `birthday`, `origin`, `city`, `timezone` (= `farm_accounts.timezone`), `market`, `language`, `disclosed`, `disclosed_since`, `signature` (2 traits + 1 trait décalé), `backstory` ≤ 80 mots, `visual_anchor`, `brand_colors` | légendes, réponses, page publique, **inscriptions** (`account-creation.md`) |
+| `identity.birthday` | date ISO `AAAA-MM-JJ`, cohérente avec `age`, jamais un 1ᵉʳ janvier ni une date connue, un jour et un mois différents d'une fiche à l'autre. **Les quatre plateformes demandent une date complète à l'inscription**, pas un âge : c'est cette valeur qui est tapée à l'écran (paramètre `birthday` des skills `ofmai_signup_*`, `account-creation.md` §6) et c'est elle qu'il faudra ressortir pour une vérification ou une récupération de compte, des mois plus tard. `age` reste dans la fiche parce qu'il sert aux textes (bio « sierra, 25, la ») ; il se recalcule depuis `birthday`, il ne le remplace pas | `account-creation.md` §6.0-§6.4, bios (§6), page publique |
 | `identity.disclosed` | `true` \| `false` — le personnage se déclare IA sur Instagram, TikTok, X et Reddit (bio, `#AI`, pool `ai`, comment-to-DM, et label AIGC figé à la mise en file) ; 3 fiches sur 6 à `true` (§3.3) ; sans effet sur Fanvue, toujours déclaré (§4) ; ne change pas pendant le test, hors les deux exceptions de §3.3 | bios, légendes (`content-pipeline.md`), `SocialPublication.aigcLabel` au moment de la mise en file, pont (`disclosed` dans `GET /api/farm/personas`), `metrics-attribution.md` (groupes `declared` / `undeclared`) |
 | `identity.disclosed_since` | date ISO ou `null` — renseignée seulement quand un personnage bascule en cours de test (§3.3) ; ses données antérieures restent dans son groupe d'origine jusqu'à cette date | `metrics-attribution.md` §8.3, pont (`bridge-ofmai-farm.md` §3.5) |
-| `niche` | `radar` (clé `TrackedInfluencer.niche`, libellés dans `lib/radar/niche-labels.ts`), `theme`, `vehicle`, `hashtags_niche` (CSV = `farm_accounts.niche`, recherches de détour), `source` (fenêtre `window_days` / `window_days_max`, tri `outlierScore`, `account_type`, `media` = `ScrapedPost.mediaType` `video` \| `image`) — le radar est la seule source de contenu (`content-pipeline.md` §2) | programmateur, planner, sélection des posts source |
+| `niche` | `radar` (clé `TrackedInfluencer.niche`, libellés dans `lib/radar/niche-labels.ts`), `theme`, `vehicle`, `hashtags_niche` (CSV = `farm_accounts.niche`, repli des recherches de détour), `source` (fenêtre `window_days` / `window_days_max`, tri `outlierScore`, `account_type`, `media` = `ScrapedPost.mediaType` `video` \| `image`) — le radar est la seule source de contenu (`content-pipeline.md` §2) **et la source des cibles de chauffe** : `niche.radar` dit dans quelle niche du radar puiser les comptes que le personnage suit et les profils qu'il visite (`warming-policy.md` §8.2, `GET /api/farm/targets`) | programmateur, planner, sélection des posts source, sélection des cibles de suivi |
 | `voice` | `tone`, `writing`, `reply_tone`, `emoji` | légendes, `comment_reply` / `dm_reply` |
 | `vocabulary`, `forbidden_words` | mots qu'elle emploie ; mots interdits **en plus** de `rules.md` R10-R11 et de `checkPromptPolicy` | agent conformité (`content-pipeline.md` §8) |
 | `calendar` | `mon` … `sun` → format du jour (`reel` = réplication vidéo, `carousel` = réplication d'image) + plateformes ; le sujet vient du post radar sélectionné, jamais d'un preset | programmateur (`content-pipeline.md` §10) |
@@ -46,6 +47,8 @@ ofmai:
 identity:
   name: Sierra                              # a valider
   age: 25
+  birthday: "2001-08-26"                    # date complete exigee a l'inscription sur les 4 plateformes ;
+                                            # tapee telle quelle (param birthday, account-creation.md §6)
   origin: mixed                             # jamais de nationalite precise en public
   city: Los Angeles, CA                     # = Etat du proxy statique (infrastructure-geelark-proxies.md)
   timezone: America/Los_Angeles             # = farm_accounts.timezone = fuseau GeeLark (R20)
@@ -62,6 +65,7 @@ identity:
   brand_colors: ["#F4F1EA", "#1E1E1E", "#E07A3F"]
 niche:
   radar: fitness                            # TrackedInfluencer.niche ; 160 comptes (145 US), 432 videos, 4 decollages (§3.1)
+                                            # sert aussi de vivier de cibles de chauffe (warming-policy.md §8.2)
   theme: 6am club, gym mirror, meal prep, LA sun
   vehicle: [gym mirror, morning run, smoothie bar, beach workout, studio stretch]
   hashtags_niche: "gymgirl,fitnessmotivation,losangeles,morningroutine"
@@ -209,6 +213,17 @@ Aucun tatouage sur les six (même la gothique) : c'est la raison de l'exclusion 
 | `riley` | `riley, 22, seattle / online too much / new every day` |
 | `vera` | `vera, 25, chicago / black on black / new every day` |
 
+Dates de naissance (`identity.birthday`, §1), cohérentes avec l'âge au 2026-09-15, jours et mois tous différents, aucun 1ᵉʳ janvier, aucune date connue — c'est ce qui est tapé à l'inscription sur les quatre plateformes et ce qu'il faudra retrouver pour une vérification ou une récupération de compte :
+
+| Slug | Âge | `birthday` |
+|---|---|---|
+| `sierra` | 25 | `2001-08-26` |
+| `camila` | 24 | `2002-07-09` |
+| `hana` | 23 | `2003-05-22` |
+| `skyler` | 24 | `2001-11-06` |
+| `riley` | 22 | `2004-02-27` |
+| `vera` | 25 | `2000-10-18` |
+
 Plateformes pour les six : Instagram + TikTok (SFW, Soul, → ofmai.ai) ; X + Reddit (18+, LoRA, → hotofmai.ai / Fanvue) ; Fanvue (déclaré IA pour les six). Marché : US pour tous (proxy, GPS, fuseau et langue alignés, R20) ; la ville de la fiche est l'État du proxy statique.
 
 Pourquoi ces six niches :
@@ -284,7 +299,7 @@ Modèle : une ligne `SocialAccount` par compte avec `role = "brand"`, `character
 lib/social/
 ├── personas/                 sierra.yaml, camila.yaml, hana.yaml, skyler.yaml, riley.yaml, vera.yaml
 ├── personas.ts               loadPersona(slug), personaForCharacter(characterId), toFarmPersona(p)
-├── personas.test.ts          les 6 fiches valident le schéma ; ASCII des pools et bios `device` ; aucun mot de R10-R11 ; `disclosed` cohérent (aucune bio ni pseudo avec « AI », `hashtags.always: []`, pas de pool `ai` ni de `dm_text` quand `false` ; tout cela présent quand `true`) ; 3 fiches `disclosed: true` à la création, tout écart daté par `disclosed_since` (§3.3) ; `fanvue.ai_creator_badge: true` sur les 6
+├── personas.test.ts          les 6 fiches valident le schéma ; `birthday` au format `AAAA-MM-JJ`, cohérent avec `age`, jamais un 1ᵉʳ janvier, jour et mois uniques d'une fiche à l'autre ; ASCII des pools et bios `device` ; aucun mot de R10-R11 ; `disclosed` cohérent (aucune bio ni pseudo avec « AI », `hashtags.always: []`, pas de pool `ai` ni de `dm_text` quand `false` ; tout cela présent quand `true`) ; 3 fiches `disclosed: true` à la création, tout écart daté par `disclosed_since` (§3.3) ; `fanvue.ai_creator_badge: true` sur les 6
 └── compliance.ts             (content-pipeline.md §8)
 app/c/[slug]/page.tsx         page publique / link-in-bio (§5)
 app/api/farm/personas/[characterId]/route.ts   sous-ensemble servi à la ferme (bridge §3.5)
@@ -320,9 +335,9 @@ Les aperçus publics et le filigrane suivent `content-pipeline.md` §3 et §6 (`
 4. Refs et moodboard sur `hiddn2/social/<characterId>/` (§8), filigrane généré (`lib/social/watermark.ts`, `content-pipeline.md` §6).
 5. `POST /api/admin/social/accounts` ×4 (`status: creating`, un par plateforme).
 6. `npx -y tsx scripts/social/seed-comment-pools.ts <slug>`.
-7. Téléphone (`infrastructure-geelark-proxies.md` §3-4, §10) : profil GeeLark `<slug>-us`, 2 proxies IPRoyal neufs, entrées Trousseau, ligne `phones.json` — achat par Nathan.
+7. Téléphone (`infrastructure-geelark-proxies.md` §3-4, §10) : profil GeeLark `<slug>-us`, **une** adresse IPRoyal statique neuve (ville prise dans le stock disponible ce jour-là, la fiche s'aligne ensuite), entrée Trousseau `ofmai-proxy-<slug>-static`, ligne `phones.json` — achat par Nathan.
 8. SIM du personnage (`account-creation.md` §5).
 9. J0 (`account-creation.md` §6.0), puis `growth-account-onboard.js` ×4 sur 8 jours (`build-plan.md` §12).
 10. Fanvue : profil IA + 30 SFW / 10 PPV depuis la banque (Nathan, navigateur) avant le jour 8 (§4).
 11. `growth-content-army.js --characters <slug>` dès la première variante `ready`.
-12. `infrastructure-geelark-proxies.md` §8 : + ≈ 40 $/mois ; §3.2 de ce fichier mis à jour.
+12. `infrastructure-geelark-proxies.md` §8 : + ≈ 36 $/mois ; §3.2 de ce fichier mis à jour.

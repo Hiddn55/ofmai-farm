@@ -25,6 +25,30 @@ exports:
       params:
         handle: { type: string, required: true }
         caption: { type: string, required: true }
+    - name: post_photo
+      description: Publish a feed photo from the device gallery (most recent item) with a caption
+      params:
+        handle: { type: string, required: true }
+        caption: { type: string, required: true }
+    - name: post_story
+      description: Publish the most recent gallery item as a story — no caption, spends story_post and never the post budget
+      params:
+        handle: { type: string, required: true }
+    - name: comment_reply
+      description: Answer the comments under the newest post. The texts come from OFMAI; the farm types them as they are.
+      params:
+        handle: { type: string, required: true }
+        replies_ai: { type: string, required: false, description: "newline-separated ASCII replies; empty for an undeclared character" }
+        replies_thanks: { type: string, required: false, description: "newline-separated ASCII replies" }
+        replies_question: { type: string, required: false, description: "newline-separated ASCII replies" }
+        max_comments: { type: number, required: false, description: "comments read in one pass (default 10)" }
+    - name: dm_reply
+      description: Answer unread DM threads once each. The texts come from OFMAI; the farm types them as they are.
+      params:
+        handle: { type: string, required: true }
+        replies_ai: { type: string, required: false, description: "newline-separated ASCII replies" }
+        replies_thanks: { type: string, required: false, description: "newline-separated ASCII replies" }
+        replies_question: { type: string, required: false, description: "newline-separated ASCII replies" }
 
 popup_detectors:
   - detect: "Turn on Notifications"
@@ -59,6 +83,22 @@ default_params:
     post_video:
       handle: ""
       caption: ""
+    post_photo:
+      handle: ""
+      caption: ""
+    post_story:
+      handle: ""
+    comment_reply:
+      handle: ""
+      replies_ai: ""
+      replies_thanks: ""
+      replies_question: ""
+      max_comments: 10
+    dm_reply:
+      handle: ""
+      replies_ai: ""
+      replies_thanks: ""
+      replies_question: ""
 
 # Health signals ("Action Blocked", "Confirm it's you", ...) are matched by
 # gitd/farm/health.py, not here: they end the session instead of being dismissed.

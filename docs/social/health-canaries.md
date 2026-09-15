@@ -115,6 +115,14 @@ Kill-switch par machine (R31, E5.3) : fichier `data/farm/STOP` sur le Mac mini, 
 python -m gitd.farm.cli platform pause tiktok --hours 48     # S3 à la main (à créer)
 python -m gitd.farm.cli platform cut tiktok --reason "3 suspended"   # S4
 python -m gitd.farm.cli platform resume tiktok               # levée humaine
+
+Deux routes, une par côté, complémentaires — les deux sont nécessaires pour rouvrir vraiment :
+`POST /api/farm/platform/{p}/resume` (fork, `X-Ghost-Admin-Token`) rouvre `farm_platforms` et laisse le planner
+reprendre ; `POST /api/admin/social/platforms/{p}/resume` (OFMAI, `requireAdminOrInternalKey`) remet
+`SocialPlatformState` à `open` et efface les `SocialAccount.pausedUntil` encore à venir — sans elle, un `cut`
+laisse une pause de dix ans que rien ne lève côté plateforme et la file reste vide. Idempotente, elle renvoie
+`stillRed` / `stillSuspended` : ce que S3/S4 voient encore dans la fenêtre de 48 h, c'est-à-dire ce que l'humain
+passe outre, et qui peut redéclencher la règle au signal suivant.
 python -m gitd.farm.cli stop                                 # tout, tout de suite
 ```
 

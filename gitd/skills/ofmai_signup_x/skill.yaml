@@ -1,0 +1,54 @@
+name: ofmai_signup_x
+display_name: OFMAI X signup
+description: >-
+  Creates one X account on a character's own phone, by email, with a human at
+  every gate, and turns on the two sensitive-media settings before the first
+  post. Day 5 of the phone — docs/social/account-creation.md §6.3.
+version: "0.1.0"
+kind: hard
+# [to verify on the device] the Play Store build still ships under the old id
+app_package: com.twitter.android
+android_package: com.twitter.android
+platforms:
+  - android
+author: OFMAI
+license: MIT
+
+health_platform: x
+
+# X and Reddit only enter the ledger once cli.py, ledger.add_account,
+# PHASE_EXTRA_DAYS, health._PATTERNS and planner.SKILL_BY_PLATFORM accept them
+# (E1.1). An account created before that has no budget and no health state
+# (R13), so this skill is not run until `accounts add x` works.
+exports:
+  workflows:
+    - name: recorded
+      description: X signup by email, human gates, 18+ settings
+      params:
+        email: { type: string, required: true }
+        handle: { type: string, required: true }
+        name: { type: string, required: true }
+        birthday: { type: string, required: true, description: "YYYY-MM-DD, 18+ or no sensitive-media setting is offered" }
+        bio: { type: string, required: true, description: "persona sheet, ASCII, 160 chars, 18+, no link (R12, R22)" }
+
+popup_detectors:
+  - detect: "Turn on notifications"
+    button: "Not now"
+    label: "Notifications popup"
+  - detect: "Allow X to access"
+    button: "Don't allow"
+    label: "Permission request"
+  - detect: "Sync your contacts"
+    button: "Not now"
+    label: "Contacts sync"
+  - detect: "Pick a profile picture"
+    button: "Skip for now"
+    label: "Profile picture prompt — the real one is set later, from the gallery"
+  - detect: "Subscribe to Premium"
+    button: "Not now"
+    label: "Premium upsell"
+  - detect: "What do you want to see"
+    button: "Next"
+    label: "Interest picker"
+
+tested_on: []

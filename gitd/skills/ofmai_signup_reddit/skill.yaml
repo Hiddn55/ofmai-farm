@@ -1,0 +1,50 @@
+name: ofmai_signup_reddit
+display_name: OFMAI Reddit signup
+description: >-
+  Creates one Reddit account on a character's own phone, by email, with a human
+  at every gate, and turns on the two adult-content settings. Day 7 of the phone
+  — docs/social/account-creation.md §6.4.
+version: "0.1.0"
+kind: hard
+# [to verify on the device] the official Android client's package id
+app_package: com.reddit.frontpage
+android_package: com.reddit.frontpage
+platforms:
+  - android
+author: OFMAI
+license: MIT
+
+health_platform: reddit
+
+# Reddit verifies by LINK, not by code (account-creation.md §4.3): the `email`
+# checkpoint of this skill asks a human to open the notification, tap the link,
+# and come back through the recents — not to type six digits.
+exports:
+  workflows:
+    - name: recorded
+      description: Reddit signup by email, human gates, adult-content settings
+      params:
+        email: { type: string, required: true }
+        handle: { type: string, required: true }
+        name: { type: string, required: true }
+        bio: { type: string, required: true, description: "persona sheet, ASCII, 200 chars, 18+, no link (R12, R22)" }
+        niche: { type: string, required: true, description: "3-5 topics of the character's niche, for the onboarding picker" }
+
+popup_detectors:
+  - detect: "Turn on notifications"
+    button: "Not now"
+    label: "Notifications popup"
+  - detect: "Allow Reddit to access"
+    button: "Don't allow"
+    label: "Permission request"
+  - detect: "Get the app experience"
+    button: "Not now"
+    label: "Onboarding nag"
+  - detect: "Reddit Premium"
+    button: "No thanks"
+    label: "Premium upsell"
+  - detect: "Find your people"
+    button: "Skip"
+    label: "Follow suggestions — never a follow at creation (R16)"
+
+tested_on: []

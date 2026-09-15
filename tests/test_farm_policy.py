@@ -1,4 +1,4 @@
-from datetime import date, datetime
+from datetime import date, datetime, timedelta
 
 from gitd.farm import policy
 from gitd.farm.policy import (
@@ -31,6 +31,22 @@ def test_phases_instagram_and_tiktok_offsets():
     assert phase_for_day(13, "tiktok") == Phase.LIGHT
     assert phase_for_day(14, "tiktok") == Phase.NETWORK
     assert phase_for_day(24, "tiktok") == Phase.CRUISE
+
+
+def test_phases_x_reddit_follow_instagram():
+    """X and Reddit get no extra warm-up days; telegram is reserved for M2."""
+    for platform in ("x", "reddit", "telegram"):
+        assert policy.PHASE_EXTRA_DAYS[platform] == 0, platform
+        assert phase_for_day(3, platform) == Phase.CONSUME
+        assert phase_for_day(4, platform) == Phase.LIGHT
+        assert phase_for_day(8, platform) == Phase.NETWORK
+        assert phase_for_day(15, platform) == Phase.CRUISE
+    # only TikTok is slower
+    assert phase_for_day(15, "tiktok") == Phase.NETWORK
+    # every known platform has a calendar, and nothing else sneaks in
+    assert set(policy.PHASE_EXTRA_DAYS) == set(policy.PLATFORMS)
+    # the observer profile is not a role an account can carry
+    assert "observer" not in policy.ROLES
 
 
 def test_budget_is_deterministic_and_between_40_and_100_percent_of_caps():
@@ -153,3 +169,60 @@ def test_health_transitions():
     assert sb.phase_override == Phase.CONSUME
     su = apply_signal(HealthState(), "suspended", now, Phase.CRUISE)
     assert su.status == Health.SUSPENDED and not su.can_run(now.replace(year=2030))
+
+
+def test_story_post_cap():
+    """E3.4 — a story is Instagram only, one a day from `network`, never a post.
+
+    Three properties in one test, because the three together are the rule
+    (docs/social/warming-policy.md §2): the cap exists only on Instagram, it
+    opens at `network`, and spending it leaves the feed's POST budget alone —
+    a story is not a publication.
+    """
+    created = date(2026, 9, 1)
+
+    # consume and light: no story at all
+    for day, phase in ((date(2026, 9, 2), Phase.CONSUME), (date(2026, 9, 6), Phase.LIGHT)):
+        b = DailyBudget.build("instagram:1", "instagram", created, day)
+        assert b.phase == phase
+        assert b.caps[policy.STORY_POST] == 0
+        assert not BudgetTracker(b).allow(policy.STORY_POST)
+
+    # network and cruise: exactly one a day, and it never eats the feed post
+    seen = 0
+    for day in (date(2026, 9, 12), date(2026, 9, 20)):
+        b = DailyBudget.build("instagram:1", "instagram", created, day)
+        if b.rest_day:
+            continue
+        seen += 1
+        assert b.phase in (Phase.NETWORK, Phase.CRUISE)
+        assert b.caps[policy.STORY_POST] == 1
+        t = BudgetTracker(b)
+        assert t.allow(policy.STORY_POST)
+        t.record(policy.STORY_POST)
+        assert not t.allow(policy.STORY_POST)  # one a day, hard
+        assert t.allow(POST)  # the feed post of the day is untouched
+        assert t.count(POST) == 0
+    assert seen  # at least one of the two days was not a rest day
+
+    # the rest day takes it away like everything else
+    rest = next(
+        (
+            b
+            for d in range(4, 20)
+            if (b := DailyBudget.build("instagram:1", "instagram", created, created + timedelta(days=d))).rest_day
+        ),
+        None,
+    )
+    assert rest is not None and rest.caps[policy.STORY_POST] == 0
+
+    # no other platform can ever spend one: TikTok has no story workflow, X and
+    # Reddit have no stories
+    for platform in ("tiktok", "x", "reddit", "telegram"):
+        for d in range(1, 40):
+            b = DailyBudget.build(f"{platform}:1", platform, created, created + timedelta(days=d))
+            assert b.caps[policy.STORY_POST] == 0, (platform, d)
+
+    # and it stays distinct from watching someone else's story
+    assert policy.STORY_POST != policy.STORY_VIEW
+    assert policy.STORY_POST in policy.ACTIONS and policy.STORY_VIEW in policy.ACTIONS

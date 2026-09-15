@@ -252,11 +252,27 @@ def main():
         steps = json.loads(recorded_path.read_text())
         print(f"Running {len(steps)} recorded steps for {args.skill} through execution engine")
 
-        wf = RecordedWorkflow(dev, steps, params, run_id=run_id)
-        # Load popup detectors + app_package from skill.yaml
         meta_path = skill_dir / "skill.yaml"
-        if meta_path.exists():
-            meta = yaml.safe_load(meta_path.read_text()) or {}
+        meta = yaml.safe_load(meta_path.read_text()) or {} if meta_path.exists() else {}
+
+        # OFMAI fork: a skill.yaml that declares `health_platform` runs through the
+        # guarded workflow, which re-reads the screen after each step and stops the
+        # run on a suspension or an identity check (gitd/farm/signup.py). Absent the
+        # key — every skill that came from upstream — this is the plain
+        # RecordedWorkflow and nothing changes.
+        health_platform = str(meta.get("health_platform") or "").strip()
+        if health_platform:
+            from gitd.farm.signup import GuardedRecordedWorkflow
+
+            wf = GuardedRecordedWorkflow(
+                dev, steps, params, run_id=run_id, platform=health_platform, skill_name=args.skill
+            )
+            print(f"Screen guard active for platform '{health_platform}'")
+        else:
+            wf = RecordedWorkflow(dev, steps, params, run_id=run_id)
+
+        # Load popup detectors + app_package from skill.yaml
+        if meta:
             wf.app_package = skill_target_for_device(meta, args.device) or ""
             wf._popup_detectors = meta.get("popup_detectors") or None
         if engine_cfg:

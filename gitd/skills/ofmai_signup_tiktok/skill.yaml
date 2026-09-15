@@ -1,0 +1,56 @@
+name: ofmai_signup_tiktok
+display_name: OFMAI TikTok signup
+description: >-
+  Creates one TikTok account on a character's own phone, by email, with a human
+  at every gate. Day 3 of the phone — docs/social/account-creation.md §6.2.
+version: "0.1.0"
+kind: hard
+app_package: com.zhiliaoapp.musically
+android_package: com.zhiliaoapp.musically
+platforms:
+  - android
+author: OFMAI
+license: MIT
+
+health_platform: tiktok
+
+# The AIGC label is NOT a setting of the account and is never touched here: it is
+# posted post by post, from params.aigc_label of the publication order (R2, R3,
+# publishing.md §1.1). A signup that flipped an "AI" switch would decide for the
+# whole 3-of-6 disclosure test.
+exports:
+  workflows:
+    - name: recorded
+      description: TikTok signup by email, human gates
+      params:
+        email: { type: string, required: true }
+        handle: { type: string, required: true }
+        name: { type: string, required: true }
+        birthday: { type: string, required: true, description: "YYYY-MM-DD, 18+ (R2)" }
+        bio: { type: string, required: true, description: "persona sheet, ASCII, 80 chars, no link (R12, R22)" }
+
+popup_detectors:
+  - detect: "Choose your interests"
+    button: "Skip"
+    label: "Interest picker"
+  - detect: "connect with people"
+    button: "Don't allow"
+    label: "Contacts access popup"
+  - detect: "access to your Facebook"
+    button: "Don't allow"
+    label: "Facebook friends access popup"
+  - detect: "Turn on notifications"
+    button: "Not now"
+    label: "Notifications popup"
+  - detect: "Add a bio"
+    button: "Not now"
+    label: "Bio nag — the bio is typed later, from the persona sheet"
+  - detect: "Find friends"
+    button: "Skip"
+    label: "Follow suggestions — never a follow at creation (R16)"
+  - detect: "Swipe up for more"
+    button: "_back"
+    label: "Feed tutorial"
+    method: "back"
+
+tested_on: []

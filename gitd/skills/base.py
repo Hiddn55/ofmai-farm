@@ -562,6 +562,33 @@ class RecordedStepAction(Action):
             log.warning(line)
             print(line, flush=True)  # surfaces in the run's captured output / live log
 
+            # OFMAI fork (docs/social/rules.md R32): raise it on Discord too. The
+            # terminal line only reaches whoever is already watching the terminal,
+            # and the person who must type the code is on another continent.
+            # Fired on a daemon thread so a missing webhook, a dead network or a
+            # slow Discord can never delay the gate — the human waiting in front
+            # of a captcha must never depend on Discord being up.
+            def _discord():
+                try:
+                    from gitd.farm.alerts import checkpoint_awaiting_human
+
+                    checkpoint_awaiting_human(
+                        reason=rsn,
+                        prompt=msg,
+                        run_id=self.run_id,
+                        device=getattr(self.device, "serial", "") or "",
+                        skill=getattr(self, "skill_name", "") or "",
+                    )
+                except Exception:  # alerting is a courtesy, never a step
+                    log.debug("[checkpoint] Discord alert failed", exc_info=True)
+
+            try:
+                import threading
+
+                threading.Thread(target=_discord, name="checkpoint-alert", daemon=True).start()
+            except Exception:
+                log.debug("[checkpoint] could not start the alert thread", exc_info=True)
+
         outcome = run_checkpoint(
             reason=reason,
             prompt=prompt,
@@ -602,10 +629,24 @@ class RecordedWorkflow(Workflow):
             resolved = dict(step)
             for field in ("text", "package", "description", "goal", "prompt"):
                 if isinstance(resolved.get(field), str):
-                    for k, v in self._params.items():
-                        resolved[field] = resolved[field].replace(f"{{{k}}}", str(v))
+                    resolved[field] = self._substitute(resolved[field])
+            # …and inside a checkpoint's success condition. A gate that waits for
+            # the profile screen of the account it just created writes
+            # {"screen_has": "{handle}"}; without this, it would compare the
+            # literal string "{handle}" to the screen and never resolve.
+            # Inert for any step list that has no placeholder there.
+            success = resolved.get("success")
+            if isinstance(success, dict):
+                resolved["success"] = {
+                    k: (self._substitute(v) if isinstance(v, str) else v) for k, v in success.items()
+                }
             actions.append(RecordedStepAction(self.device, resolved, i, run_id=self._run_id))
         return actions
+
+    def _substitute(self, value: str) -> str:
+        for k, v in self._params.items():
+            value = value.replace(f"{{{k}}}", str(v))
+        return value
 
 
 # ── Skill ─────────────────────────────────────────────────────────────────────

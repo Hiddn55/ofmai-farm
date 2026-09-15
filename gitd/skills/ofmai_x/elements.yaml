@@ -1,0 +1,80 @@
+# X UI elements — fallback chain: content_desc -> text -> resource_id -> coords
+#
+# STATUS: written from the en-US accessibility labels of X for Android (2026).
+# NOT verified on a device: run Skill Miner on the first phone, fix the ids
+# here, then fill `tested_on` in skill.yaml (R34). Content-desc first,
+# resource-id second, coordinates never.
+#
+# The unit of a "view" on X is a post card of the `For you` timeline, not a
+# video: the shared warming loop treats them the same (warming-policy.md §7).
+#
+# Feed buttons carry counts in their label ("Like. 12 likes"): actions/core.py
+# matches by *contains*, the entries below are the exact-match fast path.
+
+# -- Bottom navigation ---------------------------------------------------------
+home_tab:
+  content_desc: "Home"
+  resource_id: "com.twitter.android:id/home"
+search_tab:
+  content_desc: "Search and Explore"
+  resource_id: "com.twitter.android:id/explore"
+notifications_tab:
+  content_desc: "Notifications"
+messages_tab:
+  content_desc: "Messages"
+profile_tab:
+  content_desc: "Profile"
+
+# -- Timeline ------------------------------------------------------------------
+for_you_tab:
+  text: "For you"
+like_button:
+  content_desc: "Like"
+liked_button:
+  content_desc: "Liked"
+reply_button:
+  content_desc: "Reply"
+repost_button:
+  content_desc: "Repost"
+bookmark_button:
+  content_desc: "Bookmark"
+author_avatar:
+  content_desc: "Profile image"
+author_name:
+  resource_id: "com.twitter.android:id/user_name"
+
+# -- Reply composer ---------------------------------------------------------------
+reply_input:
+  text: "Post your reply"
+  resource_id: "com.twitter.android:id/tweet_text"
+reply_send:
+  text: "Reply"
+  resource_id: "com.twitter.android:id/button_tweet"
+
+# -- Profile ------------------------------------------------------------------------
+follow_button:
+  text: "Follow"
+following_button:
+  text: "Following"
+profile_handle:
+  resource_id: "com.twitter.android:id/screen_name"
+back_button:
+  content_desc: "Back"
+
+# -- Search ---------------------------------------------------------------------------
+search_input:
+  text: "Search X"
+  resource_id: "com.twitter.android:id/query_view"
+
+# -- Own post: its replies (comment_reply, E3.2) -------------------------------
+# [to verify on the device] the three resource ids below. `profile_first_post`
+# is the topmost card of the profile timeline; the two rows below are what
+# gitd/farm/replies.pair_comments() reads to build (author, text) pairs from the
+# thread view. On X the thread view *is* the comment list — there is no sheet
+# to open, unlike Instagram and TikTok.
+profile_first_post:
+  resource_id: "com.twitter.android:id/tweet_text"
+comment_author_row:
+  resource_id: "com.twitter.android:id/user_name"
+comment_text_row:
+  resource_id: "com.twitter.android:id/tweet_text"

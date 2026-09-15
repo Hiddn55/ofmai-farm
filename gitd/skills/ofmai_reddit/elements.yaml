@@ -1,0 +1,90 @@
+# Reddit UI elements — fallback chain: content_desc -> text -> resource_id -> coords
+#
+# STATUS: written from the en-US accessibility labels of Reddit for Android
+# (2026). NOT verified on a device: run Skill Miner on the first phone, fix the
+# ids here, then fill `tested_on` in skill.yaml (R34). Content-desc first,
+# resource-id second, coordinates never.
+#
+# The unit of a "view" on Reddit is a post card of the Home feed. `like` is the
+# upvote (under the likes cap); the downvote is never tapped, and no vote is
+# ever cast in return for one received (docs/social/publishing.md §9).
+
+# -- Bottom navigation ---------------------------------------------------------
+home_tab:
+  content_desc: "Home"
+  text: "Home"
+communities_tab:
+  content_desc: "Communities"
+create_tab:
+  content_desc: "Create"
+chat_tab:
+  content_desc: "Chat"
+inbox_tab:
+  content_desc: "Inbox"
+profile_tab:
+  content_desc: "Profile"
+
+# -- Home feed -----------------------------------------------------------------
+hot_tab:
+  text: "Hot"
+new_tab:
+  text: "New"
+upvote_button:
+  content_desc: "Upvote"
+downvote_button:
+  content_desc: "Downvote"
+comment_button:
+  content_desc: "Comments"
+share_button:
+  content_desc: "Share"
+more_button:
+  content_desc: "More options"
+save_option:
+  text: "Save"
+author_name:
+  resource_id: "com.reddit.frontpage:id/author"
+subreddit_name:
+  resource_id: "com.reddit.frontpage:id/subreddit_name"
+join_button:
+  text: "Join"
+joined_button:
+  text: "Joined"
+
+# -- Comment composer ------------------------------------------------------------
+comment_input:
+  text: "Add a comment"
+  resource_id: "com.reddit.frontpage:id/reply_text"
+comment_send:
+  content_desc: "Post comment"
+  text: "Reply"
+
+# -- Profile ------------------------------------------------------------------------
+follow_button:
+  text: "Follow"
+following_button:
+  text: "Following"
+back_button:
+  content_desc: "Back"
+
+# -- Search ----------------------------------------------------------------------------
+search_icon:
+  content_desc: "Search"
+search_input:
+  text: "Search Reddit"
+  resource_id: "com.reddit.frontpage:id/search_view"
+
+# -- Own post: its comments (comment_reply, E3.2) ------------------------------
+# [to verify on the device] the three resource ids below. `profile_first_post`
+# is the topmost post of the profile page; the two rows below are what
+# gitd/farm/replies.pair_comments() reads to build (author, text) pairs. There
+# is no per-comment like element on purpose: RedditCommentAdapter sets
+# `likes_back = False` — a vote cast in return for one received is vote
+# manipulation (docs/social/publishing.md §9).
+profile_first_post:
+  resource_id: "com.reddit.frontpage:id/link_title"
+post_title:
+  resource_id: "com.reddit.frontpage:id/link_title"
+comment_author_row:
+  resource_id: "com.reddit.frontpage:id/author"
+comment_text_row:
+  resource_id: "com.reddit.frontpage:id/comment_body"

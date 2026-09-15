@@ -2,7 +2,7 @@
 
 > **Nature** : reference
 > **Statut** : à vérifier — les composants marqués « existe » ont été lus dans le code au 2026-09-14 ; le pont, la banque, les workflows et les skills X/Reddit n'existent pas encore
-> **À jour au** : 2026-09-14
+> **À jour au** : 2026-09-15
 > **Répond à** : quels systèmes composent la machine M1, où tourne chaque processus, comment un asset circule de sa génération au rapport du matin, où vit chaque secret, et ce qui se passe quand un maillon tombe
 > **Code concerné** : OFMAI `instrumentation.ts`, `lib/core/internal-url.ts`, `lib/core/host.ts`, `lib/core/discord-alerts.ts`, `lib/storage/s3.ts`, `lib/analytics/posthog-server.ts`, `lib/ingest/instagram-proxy.ts`, `lib/ingest/replication-batch.ts`, `lib/providers/image-replicate.ts`, `lib/providers/video-replicate.ts`, `lib/providers/gemini.ts`, `lib/billing/pricing.ts`, `app/api/admin/instagram/replicate-image/route.ts`, `app/api/admin/instagram/replicate-video/route.ts`, `app/api/admin/replication-batch/route.ts`, `app/api/internal/log-digest/route.ts`, `.claude/loop/notify.mjs`, `.claude/workflows/daily-fix.js`, `.claude/skills/prod/prod.sh`, `docker-compose.yml` ; fork ofmai-farm `run.py`, `gitd/config.py`, `gitd/app.py`, `gitd/mcp_server.py`, `gitd/models/base.py`, `gitd/services/scheduler_service.py`, `gitd/services/admin_auth.py`, `gitd/services/device_context.py`, `gitd/skills/checkpoint.py`, `gitd/farm/policy.py`, `gitd/farm/planner.py`, `gitd/farm/cli.py`, `gitd/farm/skillkit.py`
 
@@ -15,14 +15,14 @@ Ce fichier est la carte. Le contrat du pont est dans `bridge-ofmai-farm.md`, la 
 │ ofmai.ai (SFW, crons)   hotofmai.ai (NSFW)   Postgres 17 (nœud bdd)   S3 hiddn2 / hiddn2-public    │
 │ User · Subscription · Generation · AICharacter                  masters, variantes, filigranes     │
 │ ContentAsset · SocialAccount · SocialPublication · FarmEvent                          (à créer)    │
-│ /api/farm/{accounts,queue,comments,personas,publications,events}                      (à créer)    │
+│ /api/farm/{accounts,queue,comments,targets,personas,publications,events}              (à créer)    │
 └────────────────────────────────────────────────────────────────────────────────────────────────────┘
         ▲ HTTPS sortant seulement          ▲ webhooks des moteurs                 ▲ visiteurs avec UTM
         │ x-farm-secret                    │ (Soul, Seedance, Lustify…)           │
 ┌─────────────── Mac mini, Paris ────────────────┐      ┌──────────────── SaaS et cloud ────────────────┐
-│ python3 run.py           :5055 REST+dashboard  │      │ GeeLark : 6 téléphones + 1 observateur        │
-│   └ scheduler (tick 30 s, 1 job/téléphone)     │ ADB  │   proxy IPRoyal : IP statique ISP US          │
-│ gitd.mcp_server          :8002 (optionnel)     │─────▶│   + mobile collant ; apps IG/TikTok/X/Reddit  │
+│ python3 run.py           :5055 REST+dashboard  │      │ GeeLark : 6 tél. + observateur + explorateur  │
+│   └ scheduler (tick 30 s, 1 job/téléphone)     │ ADB  │   IPRoyal : une IP statique ISP US illimitée, │
+│ gitd.mcp_server          :8002 (optionnel)     │─────▶│   jamais changée ; apps IG/TikTok/X/Reddit    │
 │ gitd.farm.cli daemon     planner, 60 s         │      │ TikTok Content Posting via MCP Higgsfield     │
 │ gitd.farm.cli bridge     à créer, 300 s        │      │ API X · API Reddit (par l'IP statique)        │
 │ growth-*.js ×4 (launchd) workflows, à créer    │      │ ManyChat (comment-to-DM) [à vérifier]         │
@@ -41,8 +41,8 @@ Deux règles structurent tout : **la ferme tire, OFMAI ne pousse jamais** (le Ma
 | Mac mini de Paris | héberge tout ce qui touche un téléphone : Ghost, module farm, pont, workflows Claude ; un clone du repo OFMAI pour les workflows et le skill `prod` | Paris ; Nathan y accède en SSH depuis la Thaïlande | existe [à vérifier : repo OFMAI cloné, `adb`, Python ≥ 3.10 installés] |
 | Ghost (fork `ofmai-farm`, upstream android-agent v1.5.1) | serveur FastAPI + Uvicorn, scheduler par téléphone, moteur de skills, checkpoints humains, dashboard Vue, serveur MCP | Mac mini | existe |
 | Module farm `gitd/farm/` | politique de chauffe, ledger, planner, skills `ofmai_instagram` / `ofmai_tiktok`, 39 tests | Mac mini, même SQLite que Ghost | existe ; `bridge.py`, skills X/Reddit, `comment_reply`/`dm_reply` à créer |
-| GeeLark | téléphones Android cloud : un par personnage, plus un observateur ; ADB + API + RPA (plan Base, 29,9 $/mois/téléphone, brief §2) ; GPS, fuseau, langue, région alignés sur le proxy | cloud GeeLark, piloté en ADB depuis le Mac mini | compte à ouvrir ; aucun code ne parle à GeeLark |
-| IPRoyal | par téléphone : une IP statique résidentielle ISP US (2,40 $/IP/mois, jamais changée) et un mobile en session collante (5,20 $/Go) même État (brief §3) ; l'IP statique sert aussi aux appels API X/Reddit depuis le Mac mini | configuré dans GeeLark ; côté Mac mini, format `user:pass@host:port` ou `host:port:user:pass` (`lib/ingest/instagram-proxy.ts`) | compte existant ; rien dans le fork (`grep proxy gitd/farm/` : vide) |
+| GeeLark | téléphones Android cloud : **huit profils** — un par personnage (6), un observateur pour les canaris déconnectés, un explorateur sacrificiel pour le relevé des sélecteurs (R36, `infrastructure-geelark-proxies.md` §6) ; ADB + API + RPA (plan Base, 29,9 $/mois/téléphone, brief §2) ; GPS, fuseau, langue, région alignés sur le proxy | cloud GeeLark, piloté en ADB depuis le Mac mini | compte à ouvrir ; aucun code ne parle à GeeLark |
+| IPRoyal | par téléphone : **une seule** IP statique résidentielle ISP US, trafic illimité, 2,70 $/IP pour 30 jours, jamais changée (brief §3) ; elle sert à tout, de la création des comptes aux posts, y compris les appels API X/Reddit depuis le Mac mini | configuré dans GeeLark ; côté Mac mini, format `user:pass@host:port` ou `host:port:user:pass` (`lib/ingest/instagram-proxy.ts`) | compte existant ; rien dans le fork (`grep proxy gitd/farm/` : vide) |
 | API TikTok (Content Posting) via le connecteur MCP `higgsfield` | publication en `api_mode` : `tiktok_connect` → `tiktok_accounts` → `media_import_url` → `tiktok_prepare_publish` → `tiktok_publish` → `tiktok_publish_status` ; un `connector_id` par compte (`tiktok_connect` accepte un `name` distinct pour un second compte) ; quotas du connecteur 5 posts/min et 13 posts/24 h glissants ; `is_aigc` (booléen **optionnel** dans le schéma de `tiktok_prepare_publish` et de `tiktok_publish`, relu le 2026-09-14 : seuls `connector_id`, `mode` et `media_type` sont exigés) est toujours renseigné chez nous, depuis l'`aigc_label` de l'item de file (§3 étape 6) ; le média doit être hébergé chez le fournisseur (`media_import_url`, ≤ 50 Mo) | connecteur claude.ai, appelé depuis un workflow Claude sur le Mac mini ; compte différent de celui de l'app (`HIGGSFIELD_API_KEY`) | existe (outils vérifiés) ; aucun compte connecté |
 | ManyChat (ou équivalent) | comment-to-DM Meta : un commentaire « real / how / ai / tool » déclenche un DM « 100 % IA, faite sur OFMAI, 15 crédits offerts » ; 200 DM/h max, réponse seulement à une action de l'utilisateur (brief §7) | SaaS, connecté au compte Instagram du personnage | rien dans le code [à vérifier : plan, API, compte Business requis] |
 | Fanvue | page créatrice IA du personnage, premier lien du link-in-bio, badge « AI creator » [à vérifier] ; côté OFMAI `lib/fanvue/` couvre l'App Store et le billing, pas les pages créatrices | SaaS | pages à créer (`personas.md`) |
@@ -128,7 +128,7 @@ Sens des flux : Mac mini → OFMAI (HTTPS), Mac mini → téléphones (ADB), Mac
 | Ghost | `GITD_ADMIN_TOKEN` (en-tête `X-Ghost-Admin-Token` ou `Authorization: Bearer`), `ANTHROPIC_API_KEY`, `DEFAULT_DEVICE` (`.env.example` du fork) | `.env` du fork sur le Mac mini, chargé par `run.py` | `gitd/services/admin_auth.py`, agent chat |
 | Prod en lecture | mot de passe `claude_readonly` : Trousseau `ofmai-prod-db-readonly` ; clé SSH habituelle ; en routine cloud `OFMAI_PROD_DB_PASSWORD`, `OFMAI_PROD_SSH_KEY` | Trousseau du Mac | `.claude/skills/prod/prod.sh` |
 | GitHub (PR des workflows) | Trousseau `ofmai-github-token` | Trousseau du Mac | `.claude/workflows/daily-fix.js` |
-| Proxies IPRoyal, profils téléphone | identifiants proxy `HOST:PORT:USER:PASS` par profil | console GeeLark + Trousseau `ofmai-proxy-<slug>-static` / `-mobile` (lus par le publieur X/Reddit) | GeeLark, `scripts/social/publish-api.ts` ; jamais dans `farm_accounts` ni dans un `config_json` de job (`rules.md` R9) |
+| Proxy IPRoyal, profils téléphone | identifiant proxy `HOST:PORT:USER:PASS` par profil, un seul | console GeeLark + Trousseau `ofmai-proxy-<slug>-static` (lu par le publieur X/Reddit) | GeeLark, `scripts/social/publish-api.ts` ; jamais dans `farm_accounts` ni dans un `config_json` de job (`rules.md` R9) |
 | Comptes sociaux (email, mot de passe, SIM, codes de secours) | — | Trousseau `ofmai-social-*` (table ci-dessous), second exemplaire dans le gestionnaire de Nathan (`account-creation.md` §8) ; jamais le repo ni la SQLite non chiffrée du fork | un humain, au checkpoint |
 | OAuth TikTok de chaque compte | — | chez le fournisseur du connecteur MCP ; `tiktok_reconnect` quand le connecteur passe en `error` | workflow de publication |
 | Sauvegarde du fork | clés IAM de l'utilisateur `farm-backup` (`s3:PutObject` sur `hiddn2/farm-backups/*` seulement) | Trousseau `ofmai-aws-backup` (`ACCESS:SECRET`) | `scripts/farm_backup.sh` (E1.5) |
@@ -145,7 +145,7 @@ Sens des flux : Mac mini → OFMAI (HTTPS), Mac mini → téléphones (ADB), Mac
 | `ofmai-internal-api-key` | `INTERNAL_API_KEY` | workflows `growth-*` → `app/api/admin/social/*` |
 | `ofmai-aws-backup` | `ACCESS:SECRET` de l'IAM `farm-backup` | `scripts/farm_backup.sh` |
 | `ofmai-prod-db-readonly` | mot de passe `claude_readonly` | `.claude/skills/prod/prod.sh` |
-| `ofmai-proxy-<slug>-static`, `ofmai-proxy-<slug>-mobile` | `HOST:PORT:USER:PASS` | GeeLark (à la main), `publish-api.ts` |
+| `ofmai-proxy-<slug>-static` | `HOST:PORT:USER:PASS` (une seule entrée par personnage ; `<slug>` vaut aussi `observer` et `explorer`, `infrastructure-geelark-proxies.md` §6) | GeeLark (à la main), `publish-api.ts` |
 | `ofmai-social-gmail-<slug>` | mot de passe Gmail (`-a <email>`) | humain, J0 |
 | `ofmai-social-sim-<slug>` | `PIN=…;PUK=…` (`-a <numéro>`) | humain, checkpoint `sms` |
 | `ofmai-social-<plateforme>-<slug>` | mot de passe du compte (`-a <email>`) | humain, checkpoint `login` |
@@ -167,7 +167,7 @@ Côté OFMAI il n'existe pas de `.env.example` ; la liste des variables de prod 
 | Secret du pont cassé (401) | alerte Discord, boucle du bridge en pause 15 min | reposer `FARM_BRIDGE_SECRET` des deux côtés (Coolify + Trousseau), redémarrer le bridge |
 | Téléphone GeeLark hors ligne, ADB perdu | le job échoue (`device not found`), `post_failed` avec `ambiguous=false`, la santé du compte ne bouge pas ; `staged` repasse à `claimed` si `adb shell ls` échoue | `adb connect` ; outil MCP `device_health` / `fix_device_health` ; au plus 2 tentatives par publication |
 | Proxy statique en panne | l'appareil n'a plus de réseau ; ne **jamais** remplacer l'IP (`rules.md` R18) | `accounts disable` le temps du ticket IPRoyal ; `enable` au retour de la même IP |
-| Bascule mobile pendant une action | motif « suspicious login » | interdit par construction : la bascule n'a lieu que dans le creux ≥ 45 min entre deux sessions (`plan_sessions`, `rules.md` R19) |
+| « Change proxy » sur un profil en service | motif « suspicious login », Auto-match rejoué, fuseau et GPS déplacés | interdit par construction : l'adresse d'un personnage est posée une fois et ne change plus jamais (`rules.md` R18, `infrastructure-geelark-proxies.md` §4.2) |
 | Checkpoint humain non résolu | run en `awaiting_human`, `DEFAULT_TIMEOUT_S = 600` → `timed_out` (relançable) ; `0` = attente infinie | un humain fournit le code sur l'appareil puis `POST /api/skills/runs/{id}/resume` ; alerte Discord dans la minute (R32) |
 | Signal santé sur un compte | session arrêtée sans réessai ; `action_blocked` → `COOLDOWN` 48 h (`COOLDOWN_HOURS`) et une phase en arrière ; `shadowban` → 7 j (`SHADOWBAN_DAYS`) ; `suspended` → quarantaine 30 j (`QUARANTINE_DAYS`) ; `verification` / `logged_out` / `suspended` → un humain | `health-canaries.md` ; `accounts clear-health` après avoir regardé l'écran (R26) |
 | Deux comptes rouges en 48 h sur une plateforme | pause de la plateforme — décision du brief, absente du code | manuel aujourd'hui : `accounts disable` sur chaque compte, `POST /api/scheduler/queue/{id}/kill` ; règle collective à coder (`build-plan.md`) |

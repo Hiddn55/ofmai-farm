@@ -1,0 +1,72 @@
+name: ofmai_x
+display_name: OFMAI X
+description: X warming for OFMAI characters — humanised, budgeted by the farm ledger. Publishing happens through the API, never from the device.
+version: "0.1.0"
+# [to verify on the device] the Play Store build still ships under the old id
+app_package: com.twitter.android
+author: OFMAI
+license: MIT
+
+exports:
+  actions:
+    - name: open_app
+      description: Launch X on the For you timeline
+  workflows:
+    - name: warm_session
+      description: One humanised warming session driven by today's budget
+      params:
+        handle: { type: string, required: true }
+        minutes: { type: number, required: false }
+        comments: { type: string, required: false, description: "newline-separated ASCII replies" }
+        niche: { type: string, required: false, description: "comma-separated hashtags" }
+    - name: comment_reply
+      description: Answer the replies under the newest post, and like them back. The texts come from OFMAI; the farm types them as they are.
+      params:
+        handle: { type: string, required: true }
+        replies_ai: { type: string, required: false, description: "newline-separated ASCII replies; empty for an undeclared character" }
+        replies_thanks: { type: string, required: false, description: "newline-separated ASCII replies" }
+        replies_question: { type: string, required: false, description: "newline-separated ASCII replies" }
+        max_comments: { type: number, required: false, description: "comments read in one pass (default 10)" }
+
+# The reply could go through the API; the like back cannot (R16), so both
+# stay on the device.
+
+# No post workflow on purpose: X posts go out through the official API from the
+# Mac mini, over the character's static exit IP (docs/social/publishing.md).
+
+popup_detectors:
+  - detect: "Turn on notifications"
+    button: "Not now"
+    label: "Notifications popup"
+  - detect: "Allow X to access"
+    button: "Don't allow"
+    label: "Permission request"
+  - detect: "Sync your contacts"
+    button: "Not now"
+    label: "Contacts sync"
+  - detect: "Get the best of X"
+    button: "Not now"
+    label: "Onboarding nag"
+  - detect: "Subscribe to Premium"
+    button: "Not now"
+    label: "Premium upsell"
+
+default_params:
+  workflows:
+    warm_session:
+      handle: ""
+      minutes: 0
+      comments: ""
+      niche: ""
+    comment_reply:
+      handle: ""
+      replies_ai: ""
+      replies_thanks: ""
+      replies_question: ""
+      max_comments: 10
+
+# Health signals ("Rate limit exceeded", "Your account is locked", ...) are
+# matched by gitd/farm/health.py, not here: they end the session instead of
+# being dismissed.
+
+tested_on: []

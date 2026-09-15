@@ -1,0 +1,133 @@
+[
+  {
+    "action": "launch",
+    "package": "com.instagram.android",
+    "description": "Launch Instagram on the character's phone",
+    "goal": "First opening of the app since J0; the profile has been on its static US address for 24 h",
+    "verified": false
+  },
+  { "action": "wait", "seconds": 8, "description": "Cold start", "verified": false },
+  {
+    "action": "tap",
+    "text": "Create new account",
+    "description": "Start a signup [to verify]",
+    "goal": "Leave the login screen",
+    "verified": false
+  },
+  {
+    "action": "tap",
+    "text": "Sign up with email",
+    "description": "Email, never a phone number: the signup is by email everywhere (account-creation.md §5) [to verify]",
+    "verified": false
+  },
+  { "action": "tap", "text": "Email", "description": "Focus the email field [to verify]", "verified": false },
+  { "action": "type", "text": "{email}", "description": "The character's own Gmail, created at J0", "verified": false },
+  { "action": "tap", "text": "Next", "description": "Send the confirmation code [to verify]", "verified": false },
+  {
+    "action": "checkpoint",
+    "reason": "email",
+    "prompt": "Read the 6-digit code for {email} in the Gmail notification (GET /api/phone/notifications/<serial>) and type it on the device (POST /api/phone/type). Do not open Gmail: it would send Instagram to the background. Then resume.",
+    "success": { "screen_has": "Create a password" },
+    "timeout_s": 0,
+    "description": "Email code — always asked (account-creation.md §6.1)",
+    "verified": false
+  },
+  {
+    "action": "checkpoint",
+    "reason": "login",
+    "prompt": "Type the Instagram password for {handle} on the device. Read it from the Mac mini Keychain (ofmai-social-instagram-<slug>) and type it with POST /api/phone/type; it is never a parameter of this run (R9). Tap Next, then resume.",
+    "timeout_s": 0,
+    "description": "Password — typed by a human, never recorded anywhere in this run",
+    "verified": false
+  },
+  {
+    "action": "checkpoint",
+    "reason": "generic",
+    "prompt": "Set the birthday {birthday} on the date wheel (18+ or nothing works afterwards) and tap Next, then resume. A wheel has no stable locator, which is why this is a human gesture.",
+    "timeout_s": 0,
+    "description": "Birthday",
+    "verified": false
+  },
+  { "action": "tap", "text": "Full Name", "description": "Focus the name field [to verify]", "verified": false },
+  { "action": "type", "text": "{name}", "description": "Display name from the persona sheet", "verified": false },
+  { "action": "tap", "text": "Next", "description": "Continue to the username [to verify]", "verified": false },
+  { "action": "tap", "text": "Username", "description": "Focus the username field [to verify]", "verified": false },
+  { "action": "type", "text": "{handle}", "description": "Handle 1 of the persona sheet", "verified": false },
+  { "action": "tap", "text": "Next", "description": "Submit the username [to verify]", "verified": false },
+  {
+    "action": "checkpoint",
+    "reason": "generic",
+    "prompt": "If Instagram says 'This username isn't available', clear the field and type fallback handle 2, then 3, from the persona sheet — and update the sheet with the one that was taken. If the username went through, this gate clears itself. Then resume.",
+    "success": { "screen_has": "I agree" },
+    "timeout_s": 0,
+    "description": "Username availability — self-clearing when the handle was free",
+    "verified": false
+  },
+  { "action": "tap", "text": "I agree", "description": "Terms [to verify]", "verified": false },
+  {
+    "action": "checkpoint",
+    "reason": "sms",
+    "prompt": "Phone-number screen. If a 'Skip' is offered the popup detector has already taken it and this gate clears itself. Otherwise: read the SMS on the character's OWN prepaid SIM, type the code (POST /api/phone/type), and write 'sms: sim-<character> <date> instagram' in the ledger notes — never the number itself. Never a virtual number, never another character's SIM (R25). Then resume.",
+    "timeout_s": 0,
+    "description": "Phone number — only when Instagram refuses to skip it",
+    "verified": false
+  },
+  {
+    "action": "checkpoint",
+    "reason": "captcha",
+    "prompt": "If a captcha or an 'unusual activity' puzzle is on screen, solve it by hand — never by an agent, never by a solving service (R25). Three failures in a row end the day; retry tomorrow on the same address. If there is no puzzle, just resume.",
+    "timeout_s": 0,
+    "description": "Captcha — sometimes asked (account-creation.md §6.1)",
+    "verified": false
+  },
+  {
+    "action": "checkpoint",
+    "reason": "generic",
+    "prompt": "Onboarding: dismiss contacts, Facebook and follow suggestions. Do NOT follow anyone — no follow exists at creation (R16). Then resume.",
+    "timeout_s": 0,
+    "description": "Onboarding screens",
+    "verified": false
+  },
+  {
+    "action": "tap",
+    "content_desc": "Profile",
+    "description": "Profile tab (same locator as the warming skill) [to verify]",
+    "verified": false
+  },
+  { "action": "tap", "text": "Edit profile", "description": "Open the profile editor [to verify]", "verified": false },
+  {
+    "action": "checkpoint",
+    "reason": "generic",
+    "prompt": "Profile picture: open the picture editor, choose the library, and pick the MOST RECENT gallery item — the watermarked SFW variant pushed with adb push minutes ago. Confirm it, come back to the profile editor, then resume. The picker grid has no stable locator on any of the four apps, and the wrong picture on a brand-new account cannot be undone.",
+    "timeout_s": 0,
+    "description": "Avatar",
+    "verified": false
+  },
+  { "action": "tap", "text": "Bio", "description": "Focus the bio field [to verify]", "verified": false },
+  {
+    "action": "type",
+    "text": "{bio_line1}",
+    "description": "Bio line 1 of the persona sheet — ASCII, no link before cruise (R12, R22)",
+    "verified": false
+  },
+  {
+    "action": "key",
+    "key": "ENTER",
+    "description": "New line: input_text_arg shell-quotes the whole argument, so a literal \\n never becomes a line break",
+    "verified": false
+  },
+  { "action": "type", "text": "{bio_line2}", "description": "Bio line 2", "verified": false },
+  { "action": "key", "key": "ENTER", "description": "New line", "verified": false },
+  { "action": "type", "text": "{bio_line3}", "description": "Bio line 3", "verified": false },
+  { "action": "tap", "text": "Done", "description": "Save the profile [to verify]", "verified": false },
+  { "action": "tap", "content_desc": "Profile", "description": "Back to the profile [to verify]", "verified": false },
+  {
+    "action": "checkpoint",
+    "reason": "generic",
+    "prompt": "Last look: the profile shows {handle}, the three bio lines and the picture, the account is public, and there is no link in the bio (none before day 15, R22). Register it on the Mac mini the same day — accounts add instagram @{handle} --device <serial> --tz <persona tz> --created-on <today> — then resume to close the run.",
+    "success": { "screen_has": "{handle}" },
+    "timeout_s": 0,
+    "description": "The run ends on the profile screen showing {handle}",
+    "verified": false
+  }
+]

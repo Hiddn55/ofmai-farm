@@ -17,6 +17,7 @@ from gitd.routers.creator import router as creator_router
 from gitd.routers.emulators import pool_router as emulator_pool_router
 from gitd.routers.emulators import router as emulators_router
 from gitd.routers.explorer import router as explorer_router
+from gitd.routers.farm import router as farm_router
 from gitd.routers.h264_stream import router as h264_stream_router
 from gitd.routers.marketing_jobs import router as marketing_jobs_router
 from gitd.routers.misc import router as misc_router
@@ -151,6 +152,8 @@ def create_app() -> FastAPI:
     app.include_router(emulator_pool_router)
     app.include_router(benchmarks_router)
     app.include_router(traces_router)
+    # Farm bridge, human side — every route behind X-Ghost-Admin-Token.
+    app.include_router(farm_router)
 
     # Plugin hook: load premium features if installed
     try:

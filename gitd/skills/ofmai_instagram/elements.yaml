@@ -82,3 +82,44 @@ caption_input:
   resource_id: "com.instagram.android:id/caption_input_text_view"
 share_button_final:
   text: "Share"
+create_story:
+  text: "STORY"
+# The composer's share button. `your_story` above (content-desc "Your story") is
+# the home feed's story ring; in the story composer the same words appear as the
+# button that publishes. PostStoryAction tries the element first, then the text.
+# [to verify on the device] the composer's exact label ("Your story" vs
+# "Add to story" vs "Share to > Your story"), and whether Instagram asks for a
+# confirmation after the tap.
+story_share:
+  text: "Your story"
+
+# -- Own post: comments (comment_reply, E3.2) -------------------------------------
+# [to verify on the device] all four resource ids below. `profile_grid_first_item`
+# is the newest tile of the profile grid; the two comment rows are what
+# gitd/farm/replies.pair_comments() reads to build (author, text) pairs.
+profile_grid_first_item:
+  resource_id: "com.instagram.android:id/media_thumbnail"
+comment_author_row:
+  resource_id: "com.instagram.android:id/row_comment_textview_username"
+comment_text_row:
+  resource_id: "com.instagram.android:id/row_comment_textview_comment"
+comment_reply_link:
+  text: "Reply"
+
+# -- Direct messages (dm_reply, E3.3) ---------------------------------------------
+# [to verify on the device] all of these. Incoming and outgoing bubbles are told
+# apart by geometry (left half = incoming), not by a resource id, so only the
+# row id has to be right for the "never answer without an incoming message"
+# rule to hold.
+direct_inbox:
+  content_desc: "Direct"
+dm_thread_row:
+  resource_id: "com.instagram.android:id/row_inbox_username"
+dm_message_row:
+  resource_id: "com.instagram.android:id/direct_text_message_text_view"
+dm_input:
+  text: "Message..."
+  resource_id: "com.instagram.android:id/row_thread_composer_edittext"
+dm_send:
+  text: "Send"
+  content_desc: "Send"

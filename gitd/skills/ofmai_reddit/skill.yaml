@@ -1,0 +1,73 @@
+name: ofmai_reddit
+display_name: OFMAI Reddit
+description: Reddit warming for OFMAI characters — humanised, budgeted by the farm ledger. Publishing happens through the API, never from the device.
+version: "0.1.0"
+# [to verify on the device] the official Android client's package id
+app_package: com.reddit.frontpage
+author: OFMAI
+license: MIT
+
+exports:
+  actions:
+    - name: open_app
+      description: Launch Reddit on the Home feed
+  workflows:
+    - name: warm_session
+      description: One humanised warming session driven by today's budget
+      params:
+        handle: { type: string, required: true }
+        minutes: { type: number, required: false }
+        comments: { type: string, required: false, description: "newline-separated ASCII comments" }
+        niche: { type: string, required: false, description: "comma-separated subreddit names" }
+    - name: comment_reply
+      description: Answer the comments under the newest post. The texts come from OFMAI; the farm types them as they are. Never a vote in return.
+      params:
+        handle: { type: string, required: true }
+        replies_ai: { type: string, required: false, description: "newline-separated ASCII replies; empty for an undeclared character" }
+        replies_thanks: { type: string, required: false, description: "newline-separated ASCII replies" }
+        replies_question: { type: string, required: false, description: "newline-separated ASCII replies" }
+        max_comments: { type: number, required: false, description: "comments read in one pass (default 10)" }
+
+# No dm_reply on purpose: no automatic DM answer on Reddit in V1
+# (docs/social/publishing.md §9).
+
+# No post workflow on purpose: a Reddit publication only ever goes out through
+# the API, and only once the account is at least 31 days old with 100+ karma
+# (docs/social/warming-policy.md §10, publishing.md §5).
+
+popup_detectors:
+  - detect: "Turn on notifications"
+    button: "Not now"
+    label: "Notifications popup"
+  - detect: "Allow Reddit to access"
+    button: "Don't allow"
+    label: "Permission request"
+  - detect: "Pick your interests"
+    button: "Skip"
+    label: "Interest picker"
+  - detect: "Get the app experience"
+    button: "Not now"
+    label: "Onboarding nag"
+  - detect: "Reddit Premium"
+    button: "No thanks"
+    label: "Premium upsell"
+
+default_params:
+  workflows:
+    warm_session:
+      handle: ""
+      minutes: 0
+      comments: ""
+      niche: ""
+    comment_reply:
+      handle: ""
+      replies_ai: ""
+      replies_thanks: ""
+      replies_question: ""
+      max_comments: 10
+
+# Health signals ("You've been doing that a lot", "Verify your email", ...) are
+# matched by gitd/farm/health.py, not here: they end the session instead of
+# being dismissed.
+
+tested_on: []
