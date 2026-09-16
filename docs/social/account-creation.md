@@ -102,6 +102,23 @@ Reasons par porte : `email` (code reçu sur Gmail), `login` (mot de passe tapé 
 
 `GET /api/phone/notifications/R58N1234` (`get_notifications` dans `gitd/services/device_context.py` : `dumpsys notification --noredact`, renvoie `[{package, title, text}]`) lit le code dans la notification Gmail sans mettre l'app d'inscription en arrière-plan. Conditions : notifications Gmail activées sur le profil et aperçu du contenu autorisé [à vérifier sur GeeLark]. Ne pas utiliser `gmail_utils.check_gmail_inbox_most_recent()` (`gitd/skills/gmail_utils.py`) pendant un run : `_launch_gmail` fait `am force-stop` puis relance Gmail au premier plan, l'app d'inscription perd l'écran. Reddit envoie un **lien** de vérification, pas un code : l'humain ouvre la notification, tape le lien, revient à l'app par les récents, puis `resume`.
 
+## 4 bis. L'adresse e-mail est la clé d'identité, et elle est inter-plateformes
+
+Vérifié le 2026-09-16 sur le profil explorateur, sur deux plateformes :
+
+- Instagram a désactivé à la création un compte ouvert avec `djodjoralas.s@gmail.com` (`screens-instagram.md` §4 bis) ;
+- TikTok, avec `djodjo.ralass@gmail.com`, a répondu **« You've already signed up »** et a basculé sur un écran de connexion.
+
+Les deux adresses sont des variantes à points de `djodjoralass@gmail.com`. **Gmail ignore les points, et les plateformes appliquent la même normalisation** : ces adresses ne sont pas distinctes, ce sont des alias d'une boîte qui porte déjà un compte sur chacune de ces plateformes. L'astuce des points ne crée donc aucune identité — elle crée un doublon, c'est-à-dire exactement le signal qu'on cherche à éviter.
+
+**Ce que ça impose à J0** : six boîtes réellement distinctes, une par personnage, et non six alias d'une même boîte. Les contraintes qui se cumulent :
+
+1. La partie locale doit porter le handle du personnage, parce qu'Instagram **pré-remplit le pseudo avec elle** (`screens-instagram.md` §1).
+2. La boîte doit être **lisible par un programme** (IMAP ou API) pour que le checkpoint `email` se résolve sans humain.
+3. Le domaine ne doit être ni `ofmai.ai` ni `hotofmai.ai` : l'adresse est visible de la plateforme, et rattacher les comptes de la ferme au domaine de la société est un lien qu'on ne peut plus défaire.
+
+La forme qui satisfait les trois : **un domaine neutre acheté pour la ferme, avec une boîte attrape-tout**, puis `<handle>@<domaine-ferme>` par personnage. Ordre de grandeur : une dizaine d'euros par an pour le domaine, quelques euros par mois pour l'hébergement du courrier. [à valider avec Nathan]
+
 ## 5. Pool de numéros réels
 
 Décision de départ (brief M1 §4) : jamais de numéro virtuel ; des SIM réelles, à définir avec Nathan. Règles fixées ici, le reste est [à définir avec Nathan] :
