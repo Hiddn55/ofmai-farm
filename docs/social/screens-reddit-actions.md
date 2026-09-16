@@ -19,12 +19,17 @@ Nuance importante : les **commentaires**, eux, portent une `content-desc` riche 
 | `view` | `post_unit`, `post_header` | — | oui |
 | `follow` (= rejoindre) | `post_join_button` | libellé `Join` → **`Joined`** | **oui, vérifié** |
 | `like` (= upvote) | décalage fixe dans `post_footer` | **flèche et compteur passent à l'orange** (contrôle visuel) | **oui, vérifié** |
+| `save` | `post_overflow` → `action_item_title` « Save » | l'entrée du menu devient **`Unsave`** | **oui, vérifié** |
 | `comment` | `Join the conversation` → champ → `Send comment` | le fil affiche `Level 1 comment by <handle>, Now, 1 vote` | **oui, vérifié** |
-| `post` | `post_title_field`, `post_body_field` / `richtext_edit_text_view`, `community_selector` | — | **non** : composeur entièrement relevé, publication **non effectuée** — le sélecteur n'offre pas le profil personnel comme destination et publier un test dans une vraie communauté dérange des gens pour rien |
-| `search` | `main_top_app_bar_search` | — | à relever |
-| `profile_visit` | `bottom_nav` → `You` | — | à relever |
-| `dm_reply` (= chat) | `bottom_nav` → `Inbox` | — | à relever |
-| `save` | menu `post_overflow` | — | à relever |
+| `comment_reply` | `Reply` dans `fbp_comment_footer` → `Send comment` | `Level 2 comment by <handle>, Now, 1 vote` | **oui, vérifié** |
+| `post` | Create → `community_selector` → `post_title_field` → `post_body_field` → `action_button_label` « Post » | `From <handle>, Posted Now, <titre>` | **oui, vérifié** — publié dans **r/test**, sub prévu pour ça |
+| `profile_visit` | `bottom_nav` → `You` → `profile_name` | compteurs lisibles, dont **`profile_highlights_karma`** | **oui, vérifié** |
+| `search` | `main_top_app_bar_search` → `expanded_search_field` | suggestions en `typeahead_suggestion_item`, sections en `search_section_title` | **oui, vérifié** |
+| `dm_reply` (= chat) | `bottom_nav` → `Inbox` → onglet `Chats` | — | **non** : `empty_chats_content`, aucun message entrant sur un compte neuf |
+
+**Le karma est lisible dans l'arbre** : `profile_highlights_karma` porte « 1 Karma » sur l'écran de profil. C'est exactement la donnée que `redditReadiness` (`lib/social/bridge-queue.ts`) exigeait sans qu'aucun événement ne la transporte — d'où une file Reddit qui n'aurait jamais rien publié, en silence. On sait maintenant où la lire.
+
+**Le composeur ne propose pas le profil personnel comme destination** : la recherche par pseudo ne renvoie que des communautés. Une publication Reddit vise donc toujours un sub, ce qui rend le choix des subs (`publishing.md` §5) obligatoire et non optionnel.
 
 ## 3. Coordonnées de la barre d'actions (720 × 1440)
 
@@ -35,6 +40,8 @@ Décalages **dans** `post_footer` — à recalculer à partir du centre du nœud
 | upvote | 61 | 728 |
 | downvote | 172 | 728 |
 | commentaires | 247 | 728 |
+
+Barre d'un **commentaire**, décalages dans `fbp_comment_footer` : menu 410 · `Reply` **512** · upvote 603 · downvote 662, au y du centre du nœud.
 | repost | 586 | 728 |
 | partage | 663 | 728 |
 
