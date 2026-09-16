@@ -65,6 +65,20 @@ Parade : intercepter la chaîne `run glogin` dans la sortie, reprendre le mot de
 
 Temps observé de bout en bout, avec une capture et une lecture d'écran entre chaque action : **~35 min**. En rejeu de coordonnées, sans capture : compter 4 à 6 min, dont 1 à 2 d'attente du code e-mail.
 
+## 4 bis. Ce qui se passe après le SMS : le compte est désactivé, pas vérifié
+
+Suite observée le 2026-09-16 sur `jordan.reed.97`, immédiatement après la validation du numéro :
+
+1. **Écran 13 — « Confirm you're a real person with a video selfie »**. Deux chemins seulement : `Start video selfie` (360, 1233) ou `Upload photo instead` (360, 1301). Le menu ⋮ ne propose ni « plus tard » ni « passer » : uniquement « Download your information » et « Log out ».
+2. **Écran 14 — « Upload a verification selfie »** : `Upload a photo` (360, 394) → `Choose From Gallery` (360, 1216) → permission Android `ALLOW` (360, 745) → la photo → `Submit` (360, 1233).
+3. **Écran 15 — « You submitted an appeal on <date> »** : *« Your account is not visible to people on Instagram, and you can't use it »*, revue annoncée en ~1 h, et *« if we find your account doesn't follow our Community Standards, it will be permanently disabled and you won't be able to appeal again »*.
+
+Le mot important est **appeal**. Instagram n'a pas demandé à vérifier un compte actif : il a **désactivé le compte à la création**, et le selfie est le recours. Un compte neuf créé sur téléphone cloud derrière un proxy résidentiel statique naît donc désactivé, et son sort se joue sur une revue biométrique unique et sans rattrapage.
+
+**Variable parasite introduite par ce test** : le numéro utilisé était français (+33) sur une IP San Francisco, et le code est arrivé **par WhatsApp** et non par SMS — le numéro était donc déjà connu de Meta. C'est un signal de désaccord que nous avons créé nous-mêmes ; il ne permet pas de conclure que l'escalade est systématique. Le test qui tranche est le même parcours avec un **numéro américain neuf**, tout le reste identique.
+
+**Conséquence sur le plan si l'escalade se confirme** : la règle R7 (« créé sur le téléphone, jamais acheté ») devient le point de blocage d'Instagram, puisqu'aucun personnage synthétique ne peut franchir une vérification biométrique. Trois issues, à arbitrer : créer les comptes Instagram sur du matériel réel avec une personne réelle, retirer Instagram de M1, ou commencer M1 par une plateforme dont la porte d'entrée est moins dure [à vérifier : TikTok, X, Reddit].
+
 ## 5. Portes humaines confirmées
 
 | Porte | `reason` (`gitd/skills/checkpoint.py`) | Quand | Automatisable ? |
