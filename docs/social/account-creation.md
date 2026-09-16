@@ -119,6 +119,12 @@ Les deux adresses sont des variantes à points de `djodjoralass@gmail.com`. **Gm
 
 La forme qui satisfait les trois : **un domaine neutre acheté pour la ferme, avec une boîte attrape-tout**, puis `<handle>@<domaine-ferme>` par personnage. Ordre de grandeur : une dizaine d'euros par an pour le domaine, quelques euros par mois pour l'hébergement du courrier. [à valider avec Nathan]
 
+## 4 ter. Un numéro ne sert qu'une fois, et TikTok le dit explicitement
+
+Vérifié le 2026-09-16 : sur l'écran « Enter your phone number » de TikTok, un numéro déjà rattaché à un autre compte est refusé net — **« This phone number is already taken »**. Il n'y a pas de partage possible : six personnages exigent six numéros distincts, comme ils exigent six boîtes distinctes (§4 bis).
+
+Séquence TikTok observée (explorateur, IG 46.8.2, écran 720 × 1440) : date de naissance (sélecteur à molette, **non éditable**, ~6 crans par glissement de 340 px à 400 ms) → onglet `Phone` / `Email` → e-mail seul accepté, **aucun numéro demandé à ce stade** → code à 6 chiffres par e-mail → puis un écran **« For security purposes, link your phone number to your account »** dont le bouton retour ne fait que rembobiner vers l'écran du code. Contrairement à Instagram, le numéro n'est donc pas dans le parcours nominal : il apparaît **après** la création, sous une formulation de sécurité. Reste à savoir si cet écran est systématique ou déclenché par des signaux [à vérifier : même inscription depuis un appareil et un réseau ordinaires].
+
 ## 5. Pool de numéros réels
 
 Décision de départ (brief M1 §4) : jamais de numéro virtuel ; des SIM réelles, à définir avec Nathan. Règles fixées ici, le reste est [à définir avec Nathan] :
