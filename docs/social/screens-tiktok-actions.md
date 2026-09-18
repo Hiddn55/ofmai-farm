@@ -48,12 +48,11 @@ La disparition d'un nœud n'est donc **pas** une preuve de réussite — elle pe
 
 **Séquence exacte au moment de l'échec**, parce qu'elle oriente le diagnostic : `like` → **6 s** → `save` → **8 s** → `follow`. Soit trois engagements en une quinzaine de secondes, sur un compte créé vingt minutes plus tôt, sans publication ni abonné.
 
-Deux causes possibles, non départagées :
+Deux causes étaient envisageables. **Ce qui s'est passé ensuite en écarte une :** les quatre gestes suivants ont tous réussi et ont tous été vérifiés — commentaire (344 → 345), réponse (345 → 346), recherche, publication. Si TikTok freinait un compte neuf, il aurait bloqué le **commentaire**, signal d'engagement plus fort qu'un suivi, et il l'a laissé passer deux fois. L'hypothèse comportementale ne tient donc pas.
 
-- **mécanique** — le bouton Suivre est à y=763, l'avatar à y=728 : **35 pixels d'écart**, un tap mal centré rate la cible ;
-- **comportementale** — TikTok freine peut-être l'engagement rapide d'un compte neuf. Si c'est le cas, la politique de chauffe doit prévoir que **les premiers follows ne comptent pas**, et ne pas les inscrire comme réussis au ledger.
+Reste la cause **mécanique** : le bouton Suivre est à y=763, l'avatar à y=728 — **35 pixels d'écart**. Un tap mal centré rate la cible. C'est étroit, et c'est exactement le genre de détail qui fait échouer un script sans rien signaler.
 
-Le test qui tranche : espacer les gestes de plusieurs minutes, viser plus bas, et **relire le compteur du profil après chaque follow** au lieu de se fier au fil.
+Ce qu'il faut en tirer pour le skill : **ne jamais taper le centre des `bounds` quand deux cibles sont à moins de ~50 px** ; viser le bord opposé au voisin, et **relire le compteur du profil après chaque follow** plutôt que de se fier à l'état du fil. À rejouer sur le profil explorateur, qui existe pour ça — jamais sur un personnage.
 
 **Règle** : sur TikTok, un geste ne se vérifie que par un **compteur qui bouge** — celui du post pour like, favori et commentaire, celui du profil pour le suivi. Jamais par l'absence d'un élément.
 
