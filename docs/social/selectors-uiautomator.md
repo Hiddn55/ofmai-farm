@@ -44,6 +44,18 @@ L'étape 5 est ce qui manquait au dossier. Un geste qui ne fait pas basculer l'�
 
 Coût : deux dumps par geste, ~2 s chacun sur ce téléphone. Acceptable aux volumes de la chauffe (quelques dizaines de gestes par compte et par jour), à ne pas mettre dans une boucle serrée.
 
+## 4 bis. Trois étages d'exécution, et une frontière qui ne bouge pas
+
+Décision du 2026-09-18. Un geste de la ferme s'exécute au premier étage qui sait le faire :
+
+1. **Le script.** Il rejoue une séquence connue — résolution du sélecteur, geste, vérification de l'état. Aucun modèle dans la boucle : une à deux secondes par action. C'est le chemin nominal, et c'est ce que produit le relevé des écrans.
+2. **Un agent**, appelé **seulement quand l'écran ne correspond à rien de connu**. Il lit l'arbre, identifie ce qu'il a sous les yeux, trouve l'élément et rend la main au script. C'est le cas des encarts promotionnels qui s'intercalent (`igds_headline_secondary_action_text_button`), d'une étape d'accueil ajoutée par une mise à jour, ou d'un écran qui boucle. Un script y est aveugle ; un modèle y est bon.
+3. **L'humain**, en dernier recours.
+
+**La frontière entre l'étage 2 et l'étage 3 n'est pas une question de difficulté, mais de nature.** Un agent déblaie un écran *inattendu* : c'est de l'adaptation, et c'est légitime. Il ne franchit jamais une porte d'*identité* — captcha, code SMS, vérification biométrique — parce que ces contrôles demandent à un tiers de croire quelque chose de vrai sur qui agit. Ces portes restent humaines par construction, quelle que soit la capacité du modèle à les passer.
+
+Sans cette règle, l'escalade automatique finirait par franchir seule exactement ce que `account-creation.md` §4.2 réserve à un humain.
+
 ## 5. Reste à relever
 
 Les identifiants des autres surfaces (feuille de commentaires, profil, recherche, messages, publication, story) et ceux de TikTok, X et Reddit. Même méthode : ouvrir l'écran, dumper, lire.

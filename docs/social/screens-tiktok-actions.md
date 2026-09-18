@@ -46,6 +46,15 @@ Après un tap sur `Follow jaaw`, **le nœud `Follow jaaw` disparaît de l'arbre*
 
 La disparition d'un nœud n'est donc **pas** une preuve de réussite — elle peut aussi bien signaler un rendu en cours, un changement de vue, ou rien du tout. Un skill qui s'y fie compterait des follows qui n'existent pas, et le ledger dériverait en silence par rapport à la réalité.
 
+**Séquence exacte au moment de l'échec**, parce qu'elle oriente le diagnostic : `like` → **6 s** → `save` → **8 s** → `follow`. Soit trois engagements en une quinzaine de secondes, sur un compte créé vingt minutes plus tôt, sans publication ni abonné.
+
+Deux causes possibles, non départagées :
+
+- **mécanique** — le bouton Suivre est à y=763, l'avatar à y=728 : **35 pixels d'écart**, un tap mal centré rate la cible ;
+- **comportementale** — TikTok freine peut-être l'engagement rapide d'un compte neuf. Si c'est le cas, la politique de chauffe doit prévoir que **les premiers follows ne comptent pas**, et ne pas les inscrire comme réussis au ledger.
+
+Le test qui tranche : espacer les gestes de plusieurs minutes, viser plus bas, et **relire le compteur du profil après chaque follow** au lieu de se fier au fil.
+
 **Règle** : sur TikTok, un geste ne se vérifie que par un **compteur qui bouge** — celui du post pour like, favori et commentaire, celui du profil pour le suivi. Jamais par l'absence d'un élément.
 
 ## 5. Coordonnées relevées (720 × 1440)
