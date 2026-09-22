@@ -17,7 +17,7 @@ from __future__ import annotations
 import logging
 import re
 
-from gitd.farm.replies import Comment, CommentRowsMixin, DmThread, post_key, tap_in_row
+from gitd.farm.replies import Comment, CommentRowsMixin, DmThread, post_key, rows_by_rid, tap_in_row, text_of
 from gitd.farm.warm import center, desc_of, nodes_where
 from gitd.skills.ofmai_tiktok.actions.core import PKG, TikTokAdapter
 
@@ -76,7 +76,22 @@ class TikTokCommentAdapter(CommentRowsMixin, TikTokAdapter):
         return ""
 
     def read_comments(self, xml: str) -> list[Comment]:
-        rows = super().read_comments(xml)
+        # A row is a comment only if its author sits right above the body
+        # (35 px on 46.8.2, 2026-09-22) and its own "Reply" link right under
+        # it (37-77 px). Under one's own video the sheet opens on a caption
+        # header — author `title`, caption, "3d ago" — that the mixin's wider
+        # pairing took for a comment (and, with a real comment below, for
+        # that comment's author): the pass then "replied" to the caption and
+        # found no Reply link to tap.
+        authors = rows_by_rid(xml, self._rid("comment_author_row"))
+        rows: list[Comment] = []
+        for bnode, (_, by) in rows_by_rid(xml, self._rid("comment_text_row")):
+            above = [(by - ay, anode) for anode, (_, ay) in authors if 0 < by - ay <= 60]
+            if not above or not self._reply_link_under(xml, by):
+                continue
+            author, body = text_of(min(above)[1]).lstrip("@").strip(), text_of(bnode).strip()
+            if author and body:
+                rows.append(Comment(author=author, text=body, y=by))
         if rows:
             return rows
         # obfuscated ids: each "Reply" link belongs to the comment right above it,
@@ -99,6 +114,14 @@ class TikTokCommentAdapter(CommentRowsMixin, TikTokAdapter):
             (_, author), (by, body) = above[-2], above[-1]
             out.append(Comment(author=author.lstrip("@"), text=body, y=by))
         return out
+
+    @staticmethod
+    def _reply_link_under(xml: str, body_y: int, band: int = 130) -> bool:
+        for link in nodes_where(xml, text="Reply"):
+            c = center(link)
+            if c and _text(link).strip().lower() == "reply" and 0 < c[1] - body_y <= band:
+                return True
+        return False
 
     def reply_to_comment(self, comment: Comment, text: str, xml: str) -> bool:
         if not tap_in_row(self.human, xml, comment.y, text="Reply"):

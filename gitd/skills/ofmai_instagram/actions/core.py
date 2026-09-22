@@ -61,6 +61,7 @@ class InstagramAdapter:
         self.device = device
         self.elements = elements
         self.human = human
+        self.discovered: list[str] = []  # niche accounts met in "Following" lists (§7 bis, depth 2)
 
     # ── helpers ───────────────────────────────────────────────────────
 
@@ -125,11 +126,19 @@ class InstagramAdapter:
                 return n
         return None
 
+    # sheets Instagram opens once and never again, seen on the explorer: the
+    # "Saved" sheet after the first save ("Collect the posts you love", 2026-09-22)
+    ONE_TIME_SHEETS = ("Collect the posts you love", "Start a collection", "Stories archive")
+
     def _settle(self, xml: str) -> bool:
-        """Dismiss one promotional interstitial, if any. Returns True if it did."""
+        """Dismiss one interstitial, if any. Returns True if it did."""
         if self._tap_el("promo_dismiss", xml):
             return True
         if "Introducing" in xml and self._tap_text(xml, "Not now"):
+            return True
+        if any(t in xml for t in self.ONE_TIME_SHEETS):
+            self.device.back()  # a sheet: Back closes it and nothing else
+            self.human.pause(0.8)
             return True
         return False
 
@@ -165,20 +174,44 @@ class InstagramAdapter:
             xml = self.dump()
         return self.on_feed(xml)
 
+    @staticmethod
+    def _exact(xml: str, *labels: str) -> list[str]:
+        """Nodes whose content-desc IS one of `labels` — "8,732 likes" is not a Like button."""
+        wanted = {l.lower() for l in labels}
+        out = []
+        for l in labels:
+            out += [n for n in nodes_where(xml, desc=l) if desc_of(n).strip().lower() in wanted]
+        return out
+
     def on_feed(self, xml: str) -> bool:
-        """A post with its like and comment buttons, and no comment composer open."""
-        liked = nodes_where(xml, desc="Like") or nodes_where(xml, desc="Liked")
-        if not (liked and nodes_where(xml, desc="Comment")):
+        """The home feed: its bottom bar with no comment composer open — or, on
+        a build without ids, a post with its Like and Comment buttons. A sheet
+        on top of it (Saved, promo) is not the feed: back_to_feed settles it.
+
+        A screen of the feed showing only a suggestions carousel or the tail
+        of a Reel (seen 2026-09-22) is still the feed: the loop must swipe on,
+        not "come back" to it — that round trip cost a 3-minute session all
+        but one view.
+        """
+        if self._nodes("comment_input", xml) or self._nodes("comment_input_legacy", xml):
             return False
-        return not (self._nodes("comment_input", xml) or self._nodes("comment_input_legacy", xml))
+        if any(t in xml for t in self.ONE_TIME_SHEETS) or self._nodes("promo_dismiss", xml):
+            return False
+        home = self._nodes("home_tab", xml)
+        elsewhere = self._nodes("follow_button", xml) or self._nodes("dm_thread_row", xml) or self._nodes("dm_input", xml)
+        if home and not elsewhere:
+            return True
+        liked = self._nodes("like_button", xml) or self._exact(xml, "Like", "Liked")
+        comment = self._nodes("comment_button", xml) or self._exact(xml, "Comment")
+        return bool(liked and comment)
 
     def next_video(self) -> None:
         self.human.swipe_feed("up")
 
     def _like_node(self, xml: str) -> str | None:
         node = self._topmost(self._nodes("like_button", xml))
-        if node is None:  # no id on this build: the label alone
-            node = self._topmost(nodes_where(xml, desc="Like") + nodes_where(xml, desc="Liked"))
+        if node is None:  # no id on this build: the exact label alone
+            node = self._topmost(self._exact(xml, "Like", "Liked"))
         return node
 
     def like(self, xml: str) -> bool:
@@ -204,16 +237,21 @@ class InstagramAdapter:
         else:
             self.human.tap(*c)
         self.human.pause(0.8)
-        after = self._in_row("like_button", self.dump(), c[1])
+        after_xml = self.dump()
+        after = self._in_row("like_button", after_xml, c[1])
         if after is None:
-            after = next((n for n in nodes_where(self.dump(), desc="Liked") if (cc := center(n)) and abs(cc[1] - c[1]) <= ROW_BAND), None)
+            after = next((n for n in self._exact(after_xml, "Liked") if (cc := center(n)) and abs(cc[1] - c[1]) <= ROW_BAND), None)
         if after is not None and desc_of(after).strip().lower() == "liked":
             return True
         self.last_gesture_silent = True
         return False
 
     def save(self, xml: str) -> bool:
-        """Save the topmost post — proven by ``Add to Saved`` → ``Remove from saved``."""
+        """Save the topmost post — proven by ``Add to Saved`` → ``Remove from saved``.
+
+        The first save ever opens the "Saved" sheet: it is closed here, or every
+        later gesture would land on it.
+        """
         self.last_gesture_silent = False
         like = self._like_node(xml)
         if like is None:
@@ -236,6 +274,9 @@ class InstagramAdapter:
         node2 = self._in_row("save_button", after, sc[1])
         if node2 is None:
             node2 = next((n for n in nodes_where(after, desc="Remove from saved") + nodes_where(after, desc="Saved") if (cc := center(n)) and abs(cc[1] - sc[1]) <= ROW_BAND), None)
+        if self._settle(after):
+            after = self.dump()
+            node2 = self._in_row("save_button", after, sc[1]) or node2
         if node2 is not None and (desc_of(node2).strip().lower().startswith("remove") or desc_of(node2).strip().lower() == "saved"):
             return True
         self.last_gesture_silent = True
@@ -365,16 +406,23 @@ class InstagramAdapter:
         return False
 
     def _watch_stories(self) -> bool:
-        """Open one unseen ring of the tray — proven by ``unseen story`` → ``seen story``."""
+        """Open one unseen ring of the tray — proven by its label losing "Unseen".
+
+        A ring reads "<handle>'s story, 1 of 3, Unseen." (verified 2026-09-22;
+        the survey's "unseen story" wording belongs to an older build). Our own
+        ring is the first one, next to "Add to story": never opened.
+        """
         xml = self.dump()
         self._tap_el("home_tab", xml)
         self.human.pause(2.0)
         home = self.dump()
-        rings = self._nodes("story_ring", home) or nodes_where(home, desc="story")
+        rings = [n for n in nodes_where(home, desc="'s story") if "unseen" in desc_of(n).lower()]
+        rings.sort(key=lambda n: (center(n) or (0, 0))[0])
+        own = desc_of(rings[0]).split("'s story")[0].lower() if rings and nodes_where(home, desc="Add to story") else None
         for n in rings:
             d = desc_of(n)
-            low = d.lower()
-            if "your story" in low or "unseen" not in low:
+            owner = d.split("'s story")[0].strip()
+            if not owner or owner.lower() == own:
                 continue
             c = center(n)
             if not c:
@@ -385,17 +433,25 @@ class InstagramAdapter:
                 w, h = self.human.screen.width, self.human.screen.height
                 self.human.tap(int(w * 0.85), int(h * 0.5), settle=0.3)
             self.device.back()
-            self.human.pause(1.0)
-            owner = low.split("'s ")[0]
+            self.human.pause(1.5)
             after = self.dump()
-            for m in self._nodes("story_ring", after) or nodes_where(after, desc="story"):
-                md = desc_of(m).lower()
-                if md.startswith(owner) and "seen story" in md and "unseen" not in md:
+            if not nodes_where(after, desc="'s story"):  # still inside the viewer
+                self.device.back()
+                self.human.pause(1.5)
+                after = self.dump()
+            for m in nodes_where(after, desc=f"{owner}'s story"):
+                if "unseen" not in desc_of(m).lower():
                     return True
             return False
         return False
 
     def _search(self, query: str) -> bool:
+        """The search detour. A hashtag browses its results; an ``@handle`` is the
+        oriented warm-up (warming-policy.md, "chauffe orientée"): the account's
+        profile, its Reels tab, and 5-10 of its Reels watched one after the other
+        — the only way, in the first week, to show the algorithm the niche
+        without ever touching the untrained Reels feed.
+        """
         xml = self.dump()
         if not self._tap_el("search_tab", xml):
             return False
@@ -404,6 +460,8 @@ class InstagramAdapter:
         if not (self._tap_el("search_input", sx) or self._tap_text(sx, "Search")):
             return False
         self.human.pause(0.5)
+        if query.startswith("@"):
+            return self._lose_time_in_reels_of(query.lstrip("@"))
         self.human.type_text(query if query.startswith("#") else f"#{query}")
         self.human.pause(1.5)
         self.device.press_enter()
@@ -413,6 +471,158 @@ class InstagramAdapter:
             self.human.swipe_feed("up")
             self.human.sleep(self.human.profile.rng.uniform(1.5, 4.0))
         return True
+
+    def _open_first_reel_of_grid(self, handle: str) -> bool:
+        """On a profile's Reels grid: open its first (top-left) tile."""
+        grid = self.dump()
+        tiles = self._nodes("reels_grid_tile", grid)
+        tile = min(tiles, key=lambda n: (center(n) or (9999, 9999))[::-1], default=None)
+        tile = tile or next((n for n in nodes_where(grid, desc="Row 1, Column 1") if "reel" in desc_of(n).lower()), None)
+        tile = tile or next(iter(nodes_where(grid, desc="Row 1, Column 1")), None)
+        gc = center(tile) if tile else None
+        if not gc:
+            log.info("[instagram] @%s: no first tile in the Reels grid", handle)
+            self.device.back()
+            return False
+        self.human.tap(*gc)
+        self.human.pause(2.0)
+        return True
+
+    def _watch_reels_run(self, *, reels: tuple[int, int], like_rate: float) -> int:
+        """Inside the viewer: watch a run of Reels, like a few, leave with Back. Returns the count."""
+        watched = 0
+        rng = self.human.profile.rng
+        w, h = self.human.screen.width, self.human.screen.height
+        for _ in range(rng.randint(*reels)):
+            xml = self.dump()
+            if not xml:
+                # a playing Reel never lets uiautomator settle (verified 2026-09-22):
+                # an empty tree here means "still in the viewer, video playing".
+                # A tap on the video pauses it — a human does that too — and
+                # the paused screen dumps; if it still does not, we watch blind.
+                self.human.tap(int(w * 0.5), int(h * 0.45), settle=0.8)
+                xml = self.dump()
+            elif not (self._exact(xml, "Like", "Liked") or self._nodes("like_button", xml)):
+                break  # a readable screen without the viewer's buttons: not in the viewer any more
+            self.human.sleep(rng.uniform(5.0, 20.0))
+            watched += 1
+            if xml and self.human.profile.chance(like_rate):
+                node = self._topmost(self._exact(xml, "Like"))
+                if node and (lc := center(node)):
+                    self.human.tap(*lc)
+                    self.human.pause(0.6)
+            self.human.swipe_feed("up")
+            self.human.pause(0.8)
+        self.device.back()  # the viewer
+        self.human.pause(0.8)
+        return watched
+
+    def _lose_time_in_reels_of(self, handle: str, *, reels: tuple[int, int] = (5, 10), like_rate: float = 0.12, follow_list_rate: float = 0.5) -> bool:
+        """Type the handle, open its profile, its Reels tab, and watch a run of its
+        Reels (5-20 s each, a like now and then). True when at least one Reel
+        was watched. The Reels viewer is left with Back, never by scrolling
+        into the untrained feed.
+        """
+        self.human.type_text(handle)
+        self.human.pause(2.0)
+        results = self.dump()
+
+        def exact_row(xml: str):
+            return next((n for n in self._nodes("search_result_user", xml) if _text(n).strip().lstrip("@").lower() == handle.lower()), None)
+
+        # the typeahead may only show the account as a keyword suggestion
+        # ("gymshark • 8.6M followers"): submitting the query lands on the
+        # results page, where the account is the first username row (verified 2026-09-22)
+        hit = exact_row(results)
+        if hit is None:
+            self.device.press_enter()
+            self.human.pause(2.5)
+            results = self.dump()
+            hit = exact_row(results) or next(iter(self._nodes("search_result_user", results)), None)
+        c = center(hit) if hit else None
+        if not c:
+            log.info("[instagram] @%s: no result row", handle)
+            return False
+        self.human.tap(*c)
+        self.human.pause(2.5)
+        profile = self.dump()
+        if self._settle(profile):
+            profile = self.dump()
+        # a long header (bio, links, highlights) pushes the tab strip below the
+        # fold: a short scroll brings it up
+        tab = None
+        for _ in range(3):
+            tab = next((n for n in self._nodes("profile_reels_tab", profile) if desc_of(n).strip().lower() == "reels"), None)
+            if tab:
+                break
+            self.human.swipe_feed("up")
+            self.human.pause(1.0)
+            profile = self.dump()
+        tc = center(tab) if tab else None
+        if not tc:
+            log.info("[instagram] @%s: no Reels tab on the profile", handle)
+            self.device.back()
+            return False
+        self.human.tap(*tc)
+        self.human.pause(2.0)
+        if not self._open_first_reel_of_grid(handle):
+            return False
+        watched = self._watch_reels_run(reels=reels, like_rate=like_rate)
+        if watched and self.human.profile.chance(follow_list_rate):
+            # depth 2: one account this one follows — the same niche, usually
+            self._lose_time_in_a_followed_account(handle, reels=reels, like_rate=like_rate)
+        return watched > 0
+
+    def _lose_time_in_a_followed_account(self, handle: str, *, reels: tuple[int, int], like_rate: float) -> str | None:
+        """From a profile (back on it after its Reels): its "Following" list, one
+        of the first rows, that account's Reels. Returns the account visited.
+        The discovered handle is what the ledger records as a niche target."""
+        profile = self.dump()
+        count = next(iter(self._nodes("profile_following_count", profile)), None)
+        cc = center(count) if count else None
+        if not cc:
+            return None
+        self.human.tap(*cc)
+        self.human.pause(2.5)
+        listing = self.dump()
+        rows = [n for n in self._nodes("follow_list_username", listing) if _text(n).strip()]
+        rows = [n for n in rows if _text(n).strip().lower() != handle.lower()][:8]
+        if not rows:
+            self.device.back()
+            return None
+        pick = self.human.profile.rng.choice(rows)
+        who = _text(pick).strip().lstrip("@")
+        pc = center(pick)
+        if not pc:
+            self.device.back()
+            return None
+        self.human.tap(*pc)
+        self.human.pause(2.5)
+        prof = self.dump()
+        if self._settle(prof):
+            prof = self.dump()
+        tab = None
+        for _ in range(3):
+            tab = next((n for n in self._nodes("profile_reels_tab", prof) if desc_of(n).strip().lower() == "reels"), None)
+            if tab:
+                break
+            self.human.swipe_feed("up")
+            self.human.pause(1.0)
+            prof = self.dump()
+        tc = center(tab) if tab else None
+        if not tc:
+            self.device.back()
+            self.device.back()
+            return None
+        self.human.tap(*tc)
+        self.human.pause(2.0)
+        if self._open_first_reel_of_grid(who):
+            self._watch_reels_run(reels=reels, like_rate=like_rate)
+        self.discovered.append(who)
+        log.info("[instagram] @%s: followed-account run on @%s", handle, who)
+        self.device.back()  # the profile
+        self.device.back()  # the list
+        return who
 
 
 # ── Actions ───────────────────────────────────────────────────────────────────

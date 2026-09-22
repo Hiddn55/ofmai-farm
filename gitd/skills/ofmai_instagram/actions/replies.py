@@ -62,9 +62,15 @@ class InstagramCommentAdapter(CommentRowsMixin, InstagramAdapter):
         return key
 
     def _first_grid_item(self, xml: str) -> tuple[int, int] | None:
-        """Centre of the newest tile of the profile grid (top-left of the grid)."""
+        """Centre of the newest tile of the profile grid (top-left of the grid).
+
+        On the device (2026-09-22) a tile reads "Photo by Jordan Reed at Row 1,
+        Column 1" and carries no id: the newest one is Row 1, Column 1.
+        """
+        nodes = list(nodes_where(xml, desc="Row 1, Column 1"))
         rid = self._rid("profile_grid_first_item")
-        nodes = list(nodes_where(xml, rid=rid)) if rid else []
+        if not nodes and rid:
+            nodes = list(nodes_where(xml, rid=rid))
         if not nodes:
             # accessibility fallback: "Photo by sierra…", "Reel by sierra…"
             nodes = list(nodes_where(xml, desc=" by "))

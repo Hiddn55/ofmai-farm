@@ -89,6 +89,9 @@ profile_followers_count:
   resource_id: "com.instagram.android:id/profile_header_familiar_followers_value"
 profile_following_count:
   resource_id: "com.instagram.android:id/profile_header_familiar_following_value"
+# the "Following" list of a profile (verified 2026-09-22): one username per row
+follow_list_username:
+  resource_id: "com.instagram.android:id/follow_list_username"
 # `button_container` serves "Edit profile" AND "Share profile" (and "Message" /
 # "Shop" on someone else's): only the content-desc tells them apart
 edit_profile:
@@ -107,6 +110,17 @@ search_result_fullname:
   resource_id: "com.instagram.android:id/row_search_user_fullname"
 search_query_header:
   resource_id: "com.instagram.android:id/serp_journey_header_query_text"
+
+# -- Someone's profile: the Reels tab of the grid and its tiles -----------------------------
+# the profile's own tab strip (NOT the bottom bar's clips_tab): "Grid view" / "Reels"
+profile_reels_tab:
+  resource_id: "com.instagram.android:id/profile_tab_icon_view"
+# a tile of the Reels grid: "Reel by gymshark. View Count 727K. Double tap to
+# play or pause." (verified 2026-09-22); the own grid's tiles read "… at Row 1, Column 1"
+reels_grid_tile:
+  resource_id: "com.instagram.android:id/preview_clip_thumbnail"
+profile_first_tile:
+  content_desc: "Row 1, Column 1"
 
 # -- Stories (home) ------------------------------------------------------------------------
 # a ring of the tray: content-desc "<handle>'s unseen story" -> "<handle>'s seen story"

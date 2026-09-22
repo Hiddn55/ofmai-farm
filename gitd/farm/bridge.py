@@ -51,7 +51,7 @@ from sqlalchemy import select
 from sqlalchemy.orm import Session
 
 from gitd.farm import collective, devices, ledger, planner, policy
-from gitd.farm.models import FarmAccount, FarmCommentCache, FarmOutbox, FarmPublication
+from gitd.farm.models import FarmAccount, FarmCommentCache, FarmOutbox, FarmPublication, FarmTarget
 from gitd.models.base import Base, SessionLocal, engine
 
 log = logging.getLogger(__name__)
@@ -111,6 +111,11 @@ COMMENT_CACHE_FETCH = 10
 #: pools the answering passes hand to their workflow (``planner.REPLY_POOLS``,
 #: kept as the single source so a renamed pool cannot drift between the two).
 COMMENT_KINDS = ("comment", *planner.REPLY_POOLS)
+#: Oriented warm-up (§3.7): how many radar accounts one fetch asks for, below
+#: how many playable ones the tick asks again, and how long a fresh list lasts.
+TARGETS_FETCH = 30
+TARGETS_LOW_WATER = 5
+TARGETS_REFRESH_HOURS = 24
 
 
 class BridgeNotConfigured(RuntimeError):
@@ -245,6 +250,11 @@ class OfmaiClient:
     def comments(self, *, character_id: str, platform: str, kind: str = "comment", n: int = COMMENT_CACHE_FETCH) -> list[dict]:
         params = {"character_id": character_id, "platform": platform, "kind": kind, "n": n}
         return list(self.json("GET", "/api/farm/comments", params=params).get("comments") or [])
+
+    # §3.7
+    def targets(self, *, character: str, platform: str, limit: int = TARGETS_FETCH) -> list[dict]:
+        params = {"character": character, "platform": platform, "limit": limit}
+        return list(self.json("GET", "/api/farm/targets", params=params).get("targets") or [])
 
     # §4
     def events(self, events: list[dict]) -> dict:
@@ -1100,6 +1110,52 @@ def refresh_comments(db: Session, client: OfmaiClient, account: FarmAccount, kin
     return added
 
 
+# ── Step 6 bis: targets of the oriented warm-up (§3.7) ───────────────────────
+
+
+def targets_need_refresh(db: Session, account: FarmAccount, now: datetime | None = None) -> bool:
+    """True when the account has too few playable radar accounts and OFMAI has
+    not been asked within the last ``TARGETS_REFRESH_HOURS``. The list is the
+    same every day for a niche, so asking more often only repeats it."""
+    now = now or ledger.local_now(account)
+    rows = list(
+        db.execute(
+            select(FarmTarget).where(FarmTarget.account_id == account.id, FarmTarget.source == "radar")
+        ).scalars()
+    )
+    if rows:
+        last_seen = max(datetime.fromisoformat(r.last_seen) for r in rows)
+        if now - last_seen < timedelta(hours=TARGETS_REFRESH_HOURS):
+            return False
+    playable = ledger.pick_targets(db, account, TARGETS_LOW_WATER, day=now.date())
+    return len([h for h in playable if any(r.handle == h for r in rows)]) < TARGETS_LOW_WATER
+
+
+def fetch_targets(
+    db: Session, client: OfmaiClient, account: FarmAccount, *, limit: int = TARGETS_FETCH, now: datetime | None = None
+) -> list[str]:
+    """Ask OFMAI for the best radar accounts of the character's niche and
+    remember them as ``source = radar`` (``farm_targets``). Returns the handles
+    served, known ones included — the memory of what was played stays local.
+    An account without a character, or an unreachable OFMAI, gives an empty
+    list and the session falls back to the hand-typed ``@handles``."""
+    if not account.character_id:
+        return []
+    try:
+        served = client.targets(character=account.character_id, platform=account.platform, limit=limit)
+    except OfmaiError as e:
+        log.info("[bridge] targets for @%s: %s", account.handle, e)
+        return []
+    now = now or ledger.local_now(account)
+    handles: list[str] = []
+    for item in served:
+        row = ledger.record_target(db, account, str(item.get("handle") or ""), "radar", now=now, commit=False)
+        if row is not None:
+            handles.append(row.handle)
+    db.commit()
+    return handles
+
+
 # ── Step 7: metric pulls ──────────────────────────────────────────────────────
 
 
@@ -1198,6 +1254,7 @@ class TickReport:
     results: dict = field(default_factory=dict)
     outbox: dict = field(default_factory=dict)
     comments: int = 0
+    targets: int = 0
     metrics: list[int] = field(default_factory=list)
     blocked_platforms: list[str] = field(default_factory=list)
     error: str | None = None
@@ -1255,6 +1312,8 @@ def tick(
         report.staged.extend(pull_queue(db, client, account, adb))  # step 2
         report.published.extend(publish_staged(db, account, now))  # step 3
         report.comments += refresh_comments(db, client, account, comment_kinds_for(account, now))  # step 6
+        if targets_need_refresh(db, account, now):  # step 6 bis
+            report.targets += len(fetch_targets(db, client, account, now=now))
         report.metrics.extend(enqueue_metric_pulls(db, account, now))  # step 7
 
     report.outbox = flush_outbox(db, client)  # step 5

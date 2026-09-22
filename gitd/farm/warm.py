@@ -91,6 +91,11 @@ PROPENSITY: dict[policy.Phase, Propensity] = {
 
 # Detours: every N videos (uniform in range) leave the feed for a moment.
 DETOUR_EVERY = (12, 30)
+# The oriented warm-up (warming-policy.md §7 bis): every ORIENTED_EVERY feed
+# posts, one niche account of the list is searched and a run of ITS Reels is
+# watched — that is where ~80 % of a session goes. Only when the niche list
+# names accounts ("@handle" entries); a hashtag-only list keeps the old rhythm.
+ORIENTED_EVERY = (3, 6)
 # "Put the phone down": probability per video and duration range (seconds).
 PHONE_DOWN_RATE = 0.03
 PHONE_DOWN_S = (20.0, 90.0)
@@ -118,11 +123,17 @@ class SessionStats:
     # device, long before any banner says so. An adapter that does not verify
     # never raises the flag, and this stays at zero.
     silent: int = 0
+    oriented: int = 0  # runs of a niche account's Reels (§7 bis)
+    discovered: list[str] = field(default_factory=list)  # accounts met in "Following" lists, depth 2
     # Texts actually posted, reported back to OFMAI so the pool can retire them
     # (bridge-ofmai-farm.md §4.1): a comment is drawn at random from the list, so
     # the order is not predictable without saying which ones were used.
     comments_used: list[str] = field(default_factory=list)
     replies_used: list[str] = field(default_factory=list)
+    # Niche accounts opened for an oriented run this session ("@handle" as it
+    # was searched): skillkit stamps them in farm_targets after the run, so the
+    # next session does not open the same door (§7 bis).
+    played: list[str] = field(default_factory=list)
 
     def as_dict(self) -> dict:
         return {k: v for k, v in self.__dict__.items()}
@@ -135,6 +146,8 @@ class WarmConfig:
     comments: list[str] = field(default_factory=list)  # ASCII, ready to type
     niche: list[str] = field(default_factory=list)  # hashtags / queries for detours
     detour_kinds: tuple[str, ...] = ("search",)  # skill adds "stories" when it can
+    handle: str = ""  # named in the unknown-screen evidence and alert
+    advisor: Callable | None = None  # tier 2 of unstuck.py, None = no model
 
 
 def run_session(
@@ -152,6 +165,10 @@ def run_session(
     t0 = now()
     comments = list(cfg.comments)
     next_detour = rng.randint(*DETOUR_EVERY)
+    handles = [q for q in cfg.niche if q.startswith("@")]
+    hashtags = [q for q in cfg.niche if not q.startswith("@")]
+    next_oriented = rng.randint(*ORIENTED_EVERY) if handles else None
+    played = stats.played
 
     def silent_after(ok: bool) -> bool:
         """After a gesture the adapter verifies: count a silence, stop at the cap.
@@ -189,16 +206,34 @@ def run_session(
         if check_health(xml):
             return stats
 
+        unreadable = 0
         while now() < deadline:
             xml = adapter.dump()
+            if not xml:
+                # uiautomator cannot read a screen that never settles — a card
+                # with an autoplaying video (Reddit, Instagram, TikTok): that is
+                # not a lost feed, it is a post to scroll past. Three in a row
+                # is something else, and the tiers below get to look.
+                unreadable += 1
+                if unreadable < 3:
+                    human.watch()
+                    adapter.next_video()
+                    continue
+            else:
+                unreadable = 0
             if check_health(xml):
                 break
             if not adapter.on_feed(xml):
                 adapter.back_to_feed()
                 xml = adapter.dump()
                 if not adapter.on_feed(xml):
-                    stats.error = "lost the feed"
-                    break
+                    # the script is blind here: the other two tiers (unstuck.py)
+                    from gitd.farm import unstuck
+
+                    if not unstuck.recover(adapter, adapter.platform, cfg.handle, advisor=cfg.advisor):
+                        stats.error = "unknown screen"
+                        break
+                    xml = adapter.dump()
 
             # watch the current video
             human.watch()
@@ -259,11 +294,27 @@ def run_session(
                 if check_health(cxml):
                     break
 
+            # the oriented run: a known niche account, its Reels (§7 bis)
+            if next_oriented is not None and stats.videos >= next_oriented and "search" in cfg.detour_kinds:
+                next_oriented = stats.videos + rng.randint(*ORIENTED_EVERY)
+                fresh = [h for h in handles if h not in played] or handles
+                if fresh and ledger.allow(policy.SEARCH):
+                    handle = rng.choice(fresh)
+                    played.append(handle)
+                    if adapter.detour("search", handle):
+                        ledger.record(policy.SEARCH, handle)
+                        stats.detours += 1
+                        stats.oriented += 1
+                        for who in getattr(adapter, "discovered", []):
+                            if who not in stats.discovered:
+                                stats.discovered.append(who)
+                    adapter.back_to_feed()
+
             # detour
             if stats.videos >= next_detour and cfg.detour_kinds:
                 next_detour = stats.videos + rng.randint(*DETOUR_EVERY)
                 kind = rng.choice(cfg.detour_kinds)
-                query = rng.choice(cfg.niche) if cfg.niche else None
+                query = rng.choice(hashtags) if hashtags else None
                 if kind == "search" and (query is None or not ledger.allow(policy.SEARCH)):
                     kind = None
                 if kind == "stories" and not ledger.allow(policy.STORY_VIEW):

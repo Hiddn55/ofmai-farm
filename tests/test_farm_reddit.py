@@ -135,6 +135,11 @@ class FakeReddit:
             out += _node(desc="Join the conversation", bounds=CONVERSATION_BAR)
         return out
 
+    def _render_community(self) -> str:
+        return _node(text="r/zelda", bounds=(20, 120, 200, 170)) + _node(
+            rid="subreddit_join_button", desc="Joined r/zelda" if self.joined else "Join r/zelda", bounds=(560, 120, 680, 170)
+        )
+
     def _render_search(self) -> str:
         return _node(rid="expanded_search_field", text=self.query or "Search Reddit", bounds=(60, 40, 660, 100)) + "".join(
             _node(text=q, bounds=(20, 300, 700, 360)) for q in self.searched
@@ -224,8 +229,16 @@ class FakeReddit:
                 elif self.honest:
                     self.saved = True
             self.screen = "feed"
+        elif s == "community":
+            if _inside(x, y, (560, 120, 680, 170)):
+                if self.joined:
+                    self.leaves += 1
+                elif self.honest:
+                    self.joined = True
         elif s == "post":
-            if _inside(x, y, SEND, pad=10) and self.composer:
+            if _inside(x, y, (100, 40, 400, 100)):  # the title opens the community
+                self.screen = "community"
+            elif _inside(x, y, SEND, pad=10) and self.composer:
                 if self.typed and self.honest:
                     self.comments += 1
                     self.posted.append(self.typed)
@@ -243,6 +256,8 @@ class FakeReddit:
         self.calls.append(("back",))
         if self.composer:
             self.composer = False
+        elif self.screen == "community":
+            self.screen = "post"
         elif self.screen != "feed":
             self.screen = "feed"
 
@@ -372,11 +387,20 @@ def test_open_author_opens_the_post_page_and_names_its_community():
     assert any(_near(t, _fx("comments"), 860) for t in dev.taps())
 
 
-def test_follow_from_the_post_page_comes_back_and_joins_from_the_card():
+def test_follow_from_the_post_page_joins_on_the_community_page():
+    """Most cards carry no Join button: from the post page the community's own
+    page always does — its title opens it (verified 2026-09-22)."""
     dev, ad = _adapter(screen="post")
     assert ad.follow(dev.dump_xml()) is True
     assert dev.joined and dev.leaves == 0
-    assert any(_inside(*t, JOIN) for t in dev.taps())
+    assert any(_inside(*t, (560, 120, 680, 170)) for t in dev.taps())
+    assert dev.screen == "post"  # back where the loop left it
+
+
+def test_follow_never_leaves_a_community_already_joined_from_its_page():
+    dev, ad = _adapter(screen="post", joined=True)
+    assert ad.follow(dev.dump_xml()) is False
+    assert dev.leaves == 0
 
 
 def test_follow_never_leaves_a_community_it_already_joined():

@@ -382,8 +382,14 @@ def test_aigc_label_parsing_is_strict():
 
 # ── E3.6: Instagram post_photo ────────────────────────────────────────────────
 
+# the composers reach the home feed first (the "+" only lives there), so the
+# scripted screen carries a feed pair too
+_IG_FEED_PAIR = (
+    '<node content-desc="Home" resource-id="com.instagram.android:id/feed_tab" bounds="[100,2300][180,2380]"/>'
+    '<node content-desc="Like" bounds="[30,1500][90,1560]"/><node content-desc="Comment" bounds="[110,1500][170,1560]"/>'
+)
 _IG_POST_XML = (
-    "<hierarchy>"
+    "<hierarchy>" + _IG_FEED_PAIR +
     '<node content-desc="Create" resource-id="com.instagram.android:id/creation_tab" bounds="[500,2300][580,2380]"/>'
     '<node text="POST" bounds="[300,2180][420,2250]"/>'
     '<node resource-id="com.instagram.android:id/gallery_grid_item_thumbnail" bounds="[40,400][360,720]"/>'
@@ -454,7 +460,7 @@ def test_instagram_post_photo_refuses_when_the_post_budget_is_spent(monkeypatch,
 # adjacent boxes would let a tap on one land on the other every few hundred
 # runs, and the test would fail with no code change behind it.
 _IG_STORY_XML = (
-    "<hierarchy>"
+    "<hierarchy>" + _IG_FEED_PAIR +
     '<node content-desc="Create" resource-id="com.instagram.android:id/creation_tab" bounds="[500,2300][580,2380]"/>'
     '<node text="STORY" bounds="[700,2300][860,2370]"/>'
     '<node resource-id="com.instagram.android:id/gallery_grid_item_thumbnail" bounds="[40,400][360,720]"/>'
@@ -528,3 +534,314 @@ def test_no_story_and_no_dm_reply_where_the_platform_has_none():
     ]:
         workflows = set(importlib.import_module(f"gitd.skills.{skill_name}").load().list_workflows())
         assert workflows & absent == set(), skill_name
+
+
+def test_instagram_a_suggested_reel_is_not_a_feed_post():
+    """Seen on the explorer (2026-09-22): the home feed opened on a "Suggested
+    Reel by …, 8,732 likes" carousel; a *contains* match on "like" took it for
+    a post and tapped its middle. Only the exact label, or the id, is a button."""
+    import importlib
+
+    from gitd.farm.human import HumanInput, ScreenSize, SessionProfile
+    from gitd.skills.ofmai_instagram.actions.core import InstagramAdapter
+
+    dev = FakeDevice()
+    skill = importlib.import_module("gitd.skills.ofmai_instagram").load()
+    ad = InstagramAdapter(dev, skill._elements_for_device(dev), HumanInput(dev, SessionProfile.generate(1), screen=ScreenSize(720, 1440), sleep=lambda s: None))
+    carousel = (
+        '<hierarchy><node content-desc="Suggested Reel by Ben Francis MBE, 8,732 likes, 86 comments" bounds="[0,300][720,1100]"/>'
+        '<node content-desc="Follow Ben Francis MBE" bounds="[500,1120][700,1170]"/></hierarchy>'
+    )
+    assert not ad.on_feed(carousel)
+    assert ad._like_node(carousel) is None
+    assert ad.on_feed(FEED_XML)  # the exact "Like" + "Comment" pair still is a feed
+
+
+def test_instagram_the_saved_sheet_is_closed_and_is_not_the_feed():
+    """The first save opens "Saved — Collect the posts you love" (seen on the
+    explorer 2026-09-22); it swallowed three sessions of swipes. It is not the
+    feed, and settling it is one Back."""
+    import importlib
+
+    from gitd.farm.human import HumanInput, ScreenSize, SessionProfile
+    from gitd.skills.ofmai_instagram.actions.core import InstagramAdapter
+
+    dev = FakeDevice()
+    skill = importlib.import_module("gitd.skills.ofmai_instagram").load()
+    ad = InstagramAdapter(dev, skill._elements_for_device(dev), HumanInput(dev, SessionProfile.generate(1), screen=ScreenSize(720, 1440), sleep=lambda s: None))
+    sheet = FEED_XML.replace("</hierarchy>", '<node text="Collect the posts you love" bounds="[40,860][680,900]"/><node text="Start a collection" bounds="[40,1220][680,1290]"/></hierarchy>')
+    assert not ad.on_feed(sheet)
+    assert ad._settle(sheet) is True
+    assert ("back",) in dev.calls
+
+
+# ── TikTok: what the explorer showed on 2026-09-22 (46.8.2, 720x1440) ─────────
+
+
+def _tt_feed(*, likes="Like video. 6,589 likes", like_text="6,589", liked=False, fav_text="27.2K", comments="Read or add comments. 8 comments"):
+    """One For You post as dumped on the explorer: the counts of the like and
+    the favourite are text nodes drawn INSIDE their buttons; a lit like is
+    labelled "Video liked" and loses the count from its label."""
+    like_desc = "Video liked" if liked else likes
+    return (
+        "<hierarchy>"
+        '<node content-desc="Search" bounds="[20,1241][46,1267]"/>'  # the bottom "Search · suggestion" bar comes FIRST
+        '<node content-desc="Search" bounds="[629,41][720,132]"/>'  # the magnifier
+        '<node content-desc="Ashley_Recipes profile" bounds="[634,634][707,707]"/>'
+        '<node content-desc="Follow Ashley_Recipes" bounds="[621,678][720,733]"/>'
+        f'<node content-desc="{like_desc}" bounds="[616,733][720,831]"/>'
+        '<node content-desc="Like" bounds="[635,733][708,806]"/>'
+        f'<node text="{like_text}" bounds="[616,806][720,820]"/>'
+        f'<node content-desc="{comments}" bounds="[616,831][720,929]"/>'
+        '<node content-desc="Add or remove this video from Favorites." bounds="[616,929][720,1027]"/>'
+        f'<node text="{fav_text}" bounds="[616,1002][720,1016]"/>'
+        '<node content-desc="Share video. 17.6K shares" bounds="[616,1027][720,1125]"/>'
+        '<node text="17.6K" bounds="[623,1089][720,1123]"/>'
+        '<node text="Home" bounds="[0,1332][144,1353]"/>'
+        '<node text="Profile" bounds="[576,1332][720,1353]"/>'
+        "</hierarchy>"
+    )
+
+
+def _tt_adapter(dev):
+    from gitd.farm.human import HumanInput, ScreenSize, SessionProfile
+    from gitd.skills.ofmai_tiktok.actions.core import TikTokAdapter
+
+    skill = importlib.import_module("gitd.skills.ofmai_tiktok").load()
+    return TikTokAdapter(dev, skill._elements_for_device(dev), HumanInput(dev, SessionProfile.generate(1), screen=ScreenSize(720, 1440), sleep=lambda s: None))
+
+
+def test_tiktok_counts_are_read_as_the_device_writes_them():
+    from gitd.skills.ofmai_tiktok.actions.core import parse_count
+
+    assert parse_count("Like video. 6,589 likes") == (6589, False)  # the comma groups thousands
+    assert parse_count("Like video. 51.9K likes") == (51900, True)
+    assert parse_count("3,514") == (3514, False)
+    assert parse_count("Read or add comments. Add 1st comments") == (0, False)  # no comment yet
+    assert parse_count("Video liked") == (None, False)
+
+
+def test_tiktok_favourite_and_lit_like_counts_sit_inside_the_button():
+    ad = _tt_adapter(FakeDevice())
+    xml = _tt_feed()
+    assert ad._count_of(xml, "favorite_button") == (27200, True)  # label carries no count
+    assert ad._count_of(xml, "like_button") == (6589, False)
+    assert ad._count_of(xml, "comment_button") == (8, False)
+    lit = _tt_feed(liked=True, like_text="6,590")
+    assert ad._count_of(lit, "like_button") == (6590, False)  # read under the "Video liked" label
+
+
+def test_tiktok_never_unlikes_a_video_already_liked():
+    """The bare "Like" node inside the button never changes: read alone it
+    passed a lit video for a fresh one, and the second tap would have unliked it."""
+    dev = FakeDevice()
+    dev.dump_xml = lambda: _tt_feed(liked=True, like_text="6,590")
+    ad = _tt_adapter(dev)
+    assert ad.like(dev.dump_xml()) is False
+    assert ad.last_gesture_silent is False
+    assert [c for c in dev.calls if c[:3] == ("shell", "input", "swipe")] == []
+
+
+def test_tiktok_search_taps_the_magnifier_not_the_suggestion_bar():
+    class Dev(FakeDevice):
+        def dump_xml(self):
+            return _tt_feed()
+
+    dev = Dev()
+    ad = _tt_adapter(dev)
+    ad.detour("search", "fitness")
+    first = next(c for c in dev.calls if c[:3] == ("shell", "input", "swipe"))
+    x, y = int(first[3]), int(first[4])
+    assert y < 200 and x > 600, (x, y)  # top right, not the bar at y=1254
+
+
+def test_tiktok_follow_is_proven_only_by_the_own_following_count():
+    """Both UI flips the explorer showed — the feed's "+" vanishing, the
+    profile button turning into "Message" — happened while the account's own
+    Following stayed at 0. Only that count proves a follow."""
+
+    class Dev(FakeDevice):
+        def __init__(self):
+            super().__init__()
+            self.view = "feed"
+            self.following = 0
+            self.persists = True
+
+        def adb(self, *args, timeout=30):
+            out = super().adb(*args, timeout=timeout)
+            if args[:3] == ("shell", "input", "swipe") and len(args) >= 7:
+                x, y = int(args[3]), int(args[4])
+                if abs(int(args[5]) - x) <= 30 and abs(int(args[6]) - y) <= 30:
+                    self.on_tap(x, y)
+            return out
+
+        def on_tap(self, x, y):
+            if self.view in ("feed", "profile") and 1300 <= y <= 1380:  # the tab bar: Home left, Profile right
+                self.view = "profile" if x > 500 else "feed"
+            elif self.view == "feed" and 620 <= x <= 720 and 600 <= y <= 720:
+                self.view = "author"
+            elif self.view == "author" and 129 <= x <= 318 and 423 <= y <= 495:
+                self.view = "author_followed"
+                if self.persists:
+                    self.following += 1
+
+        def back(self, delay=1.0):
+            self.calls.append(("back",))
+            if self.view in ("author", "author_followed", "profile"):
+                self.view = "feed"
+
+        def dump_xml(self):
+            if self.view == "feed":
+                return _tt_feed()
+            if self.view == "profile":
+                return (
+                    "<hierarchy>"
+                    f'<node text="{self.following}" bounds="[114,348][277,384]"/><node text="Following" bounds="[114,381][277,407]"/>'
+                    '<node text="0" bounds="[336,348][383,384]"/><node text="Followers" bounds="[314,384][405,407]"/>'
+                    '<node text="Home" bounds="[0,1332][144,1353]"/><node text="Profile" bounds="[576,1332][720,1353]"/>'
+                    "</hierarchy>"
+                )
+            button = '<node text="Follow" bounds="[129,423][318,495]"/><node text="Message" bounds="[324,423][513,495]"/>'
+            if self.view == "author_followed":  # what TikTok shows after the tap: Message + the suggested strip
+                button = '<node text=" Message" bounds="[148,423][416,495]"/><node text="Follow" bounds="[45,897][267,943]"/>'
+            return (
+                "<hierarchy>"
+                '<node text="61" bounds="[114,348][277,384]"/><node text="Following" bounds="[114,381][277,407]"/>'
+                '<node text="56.1K" bounds="[324,348][396,384]"/><node text="Followers" bounds="[314,384][405,407]"/>' + button + "</hierarchy>"
+            )
+
+    for persists, expected in ((True, True), (False, False)):
+        dev = Dev()
+        dev.persists = persists
+        ad = _tt_adapter(dev)
+        assert ad.open_author(dev.dump_xml()) == "Ashley_Recipes"
+        assert ad._following == 0  # the baseline was read from the feed before leaving it
+        assert dev.view == "author"
+        assert ad.follow(dev.dump_xml()) is expected
+        assert ad.last_gesture_silent is (not expected)
+        assert dev.view == "feed"
+
+
+def test_instagram_an_at_handle_search_watches_that_accounts_reels():
+    """The oriented warm-up: "@handle" in the niche list means search the
+    account, open its profile, its Reels tab, and watch a run of its Reels —
+    never the untrained Reels feed (warming-policy.md, chauffe orientée)."""
+    import importlib
+
+    from gitd.farm.human import HumanInput, ScreenSize, SessionProfile
+    from gitd.skills.ofmai_instagram.actions.core import InstagramAdapter
+
+    rid = "com.instagram.android:id/"
+    screens = {
+        "feed": f'<hierarchy><node content-desc="Search and explore" resource-id="{rid}search_tab" bounds="[474,1300][534,1350]"/></hierarchy>',
+        "search": f'<hierarchy><node resource-id="{rid}action_bar_search_edit_text" bounds="[60,60][600,120]"/></hierarchy>',
+        "results": f'<hierarchy><node resource-id="{rid}row_search_user_username" text="gymshark" bounds="[80,200][400,240]"/></hierarchy>',
+        "profile": (
+            f'<hierarchy><node resource-id="{rid}profile_header_follow_button" content-desc="Follow Gymshark" bounds="[20,413][219,465]"/>'
+            f'<node resource-id="{rid}profile_tab_icon_view" content-desc="Grid view" bounds="[100,700][260,760]"/>'
+            f'<node resource-id="{rid}profile_tab_icon_view" content-desc="Reels" bounds="[300,700][460,760]"/></hierarchy>'
+        ),
+        "grid": '<hierarchy><node content-desc="Reel by Gymshark at Row 1, Column 1" bounds="[0,800][240,1120]"/></hierarchy>',
+        "viewer": '<hierarchy><node content-desc="Like" bounds="[640,900][700,960]"/><node content-desc="Comment" bounds="[640,1000][700,1060]"/></hierarchy>',
+    }
+
+    class Dev(ScreenDevice):
+        serial = "fake-reels"
+
+        def __init__(self):
+            super().__init__()
+            self.view = "feed"
+            self.reels_seen = 0
+
+        def adb(self, *args, timeout=30):
+            out = super().adb(*args, timeout=timeout)
+            if args[:3] == ("shell", "wm", "size"):
+                return "Physical size: 720x1440"
+            if args[:3] == ("shell", "input", "swipe") and len(args) >= 7 and self.view == "viewer":
+                x1, y1, x2, y2 = (int(a) for a in args[3:7])
+                if abs(y2 - y1) > 30:
+                    self.reels_seen += 1
+            return out
+
+        def on_tap(self, x, y):
+            self.view = {"feed": "search", "search": "results", "results": "profile", "profile": "grid", "grid": "viewer"}.get(self.view, self.view)
+
+        def back(self, delay=1.0):
+            super().back(delay)
+            self.view = "feed"
+
+        def screen(self):
+            return screens[self.view]
+
+    dev = Dev()
+    skill = importlib.import_module("gitd.skills.ofmai_instagram").load()
+    ad = InstagramAdapter(dev, skill._elements_for_device(dev), HumanInput(dev, SessionProfile.generate(4), screen=ScreenSize(720, 1440), sleep=lambda s: None))
+    assert ad.detour("search", "@gymshark") is True
+    assert dev.reels_seen >= 4  # a run of Reels, not one
+    assert dev.view == "feed"  # left with Back
+
+
+def test_tiktok_an_at_handle_search_watches_that_accounts_videos():
+    """Same oriented run as Instagram (warming-policy.md §7 bis): the handle is
+    searched, the Users tab opened, the profile's first video played and a run
+    of its videos watched — the For You feed is never entered."""
+    import importlib
+
+    from gitd.farm.human import HumanInput, ScreenSize, SessionProfile
+    from gitd.skills.ofmai_tiktok.actions.core import TikTokAdapter
+
+    rid = "com.zhiliaoapp.musically:id/"
+    rail = '<node content-desc="Like video. 5,120 likes" bounds="[640,800][700,860]"/><node content-desc="Read or add comments. 91 comments" bounds="[640,900][700,960]"/>'
+    screens = {
+        "feed": '<hierarchy>' + rail + '<node content-desc="Search" bounds="[640,40][700,100]"/><node text="Home" bounds="[40,1300][100,1340]"/></hierarchy>',
+        "search": '<hierarchy><node class="android.widget.EditText" text="" bounds="[60,40][600,100]"/></hierarchy>',
+        "results": '<hierarchy><node text="Users" bounds="[200,140][300,180]"/><node text="gymshark" bounds="[80,300][400,340]"/></hierarchy>',
+        "profile": f'<hierarchy><node text="Followers" bounds="[300,400][400,430]"/><node resource-id="{rid}cover" bounds="[0,600][240,900]"/><node resource-id="{rid}cover" bounds="[240,600][480,900]"/></hierarchy>',
+        "viewer": '<hierarchy>' + rail + '</hierarchy>',
+    }
+
+    class Dev(ScreenDevice):
+        serial = "fake-tt-reels"
+
+        def __init__(self):
+            super().__init__()
+            self.view = "feed"
+            self.videos_seen = 0
+            self.enters = 0
+
+        def adb(self, *args, timeout=30):
+            out = super().adb(*args, timeout=timeout)
+            if args[:3] == ("shell", "wm", "size"):
+                return "Physical size: 720x1440"
+            if args[:3] == ("shell", "input", "swipe") and len(args) >= 7 and self.view == "viewer":
+                x1, y1, x2, y2 = (int(a) for a in args[3:7])
+                if abs(y2 - y1) > 30:
+                    self.videos_seen += 1
+            return out
+
+        def press_enter(self, delay=0.5):
+            self.enters += 1
+            if self.view == "search":
+                self.view = "results"
+
+        def on_tap(self, x, y):
+            if self.view == "feed" and 20 <= y <= 120:
+                self.view = "search"
+            elif self.view == "results" and 280 <= y <= 360:
+                self.view = "profile"
+            elif self.view == "profile" and y >= 580:
+                self.view = "viewer"
+
+        def back(self, delay=1.0):
+            super().back(delay)
+            self.view = "feed"
+
+        def screen(self):
+            return screens[self.view]
+
+    dev = Dev()
+    skill = importlib.import_module("gitd.skills.ofmai_tiktok").load()
+    ad = TikTokAdapter(dev, skill._elements_for_device(dev), HumanInput(dev, SessionProfile.generate(4), screen=ScreenSize(720, 1440), sleep=lambda s: None))
+    assert ad.detour("search", "@gymshark") is True
+    assert dev.enters == 1 and dev.videos_seen >= 4
+    assert dev.view == "feed"

@@ -223,11 +223,17 @@ def db():
 def test_warm_session_runs_against_fake_device(monkeypatch, db):
     monkeypatch.setenv("FARM_FAST", "1")
     created = date.today() - timedelta(days=9)
-    ledger.add_account(db, platform="x", handle="x_fake", device_serial="fake-x", created_on=created)
+    # the rest day is seeded from the row id: insert rows until today is not one
+    for i in range(40):
+        acc = ledger.add_account(db, platform="x", handle=f"x_fake_{i}", device_serial=f"fake-x-{i}", created_on=created)
+        if not ledger.budget_for(acc).rest_day:
+            break
+    else:  # pragma: no cover
+        raise AssertionError("could not build a non-rest-day X account")
 
     skill = importlib.import_module("gitd.skills.ofmai_x").load()
     dev = FakeDevice()
-    wf = skill.get_workflow("warm_session", dev, handle="@x_fake", minutes=10, seed=5, comments="nice\ncool")
+    wf = skill.get_workflow("warm_session", dev, handle=f"@{acc.handle}", minutes=10, seed=5, comments="nice\ncool")
     result = wf.run()
     assert result.success, result.error
     step = result.data["step_results"][0]["data"]

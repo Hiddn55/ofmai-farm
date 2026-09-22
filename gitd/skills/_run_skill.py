@@ -2,6 +2,7 @@
 """Run a skill action or workflow from the job queue."""
 
 import argparse
+import os
 import json
 import sys
 import time as _time
@@ -200,6 +201,21 @@ def main():
     import importlib
 
     params = json.loads(args.params)
+    # a GeeLark profile name ("sierra-us") is what the ledger holds; the phone is
+    # started and today's ip:port resolved here, and the phone stopped on exit
+    from gitd.farm import geelark
+
+    profile_name = args.device
+    if os.environ.get("GEELARK_APP_ID") and not geelark.is_serial(args.device):
+        try:
+            args.device = geelark.ensure_online(args.device)
+        except Exception as e:  # noqa: BLE001 — a phone that is not there is a failed run, not a crash
+            print(f"phone {profile_name!r} not reachable: {e}", file=sys.stderr)
+            sys.exit(3)
+        if geelark.stop_after_run():
+            import atexit
+
+            atexit.register(lambda: geelark.stop(profile_name))
     skill_meta = _load_skill_metadata(args.skill)
     if not skill_supports_device(skill_meta, args.device):
         print(skill_platform_error_text(args.skill, skill_meta, args.device), file=sys.stderr)
@@ -218,10 +234,17 @@ def main():
         print(f'Soft skill "{args.skill}" smoke check: {"ok" if ok else "fail"}' + (f" ({err})" if err else ""))
         sys.exit(0 if ok else 1)
 
-    # a GeeLark farm: the ADB login expires every ~10 min, Device repairs it
+    # a GeeLark farm: the ADB login expires every ~10 min. Device repairs it
+    # when it breaks (reactive, 20-150 s lost mid-gesture); the keep-alive
+    # re-runs glogin every ~7 min so it never breaks. Both are no-ops off GeeLark.
+    import atexit
+
     from gitd.farm import geelark
 
     geelark.install_repair()
+    keepalive = geelark.start_keepalive([args.device])
+    if keepalive is not None:
+        atexit.register(keepalive.stop)  # every exit path below is a sys.exit()
     dev = get_device(args.device)
 
     # Build engine config from CLI flags

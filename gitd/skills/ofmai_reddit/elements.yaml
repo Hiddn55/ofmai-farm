@@ -60,6 +60,13 @@ unsave_option:
 post_footer:
   resource_id: "post_footer"
 
+# -- Community page (from the post page title) -------------------------------------
+# content-desc "Join r/<name>" before; anything else ("Joined", "Leave") means a
+# member already — the only reliable route to a join, most cards carrying no
+# Join button (verified 2026-09-22)
+community_join_button:
+  resource_id: "subreddit_join_button"
+
 # -- Post page and its comments --------------------------------------------------
 # the post page's title bar shows the community ("r/zelda")
 page_title:
@@ -74,8 +81,11 @@ comment_header:
 comment_footer:
   resource_id: "fbp_comment_footer"
 # the composer opens from this bar at the bottom of the post page
+# the bar reads "Join the conversation" as TEXT on this build (2026-09-22),
+# as a content-desc on the survey's; both are tried
 comment_input:
   content_desc: "Join the conversation"
+  text: "Join the conversation"
 comment_send:
   content_desc: "Send comment"
 comments_search:

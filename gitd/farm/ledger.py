@@ -6,6 +6,7 @@ spent, records actions and signals, and applies health transitions.
 
 from __future__ import annotations
 
+import random
 import uuid
 from dataclasses import dataclass
 from datetime import UTC, date, datetime, timedelta
@@ -22,6 +23,7 @@ from gitd.farm.models import (
     FarmOutbox,
     FarmPublication,
     FarmSignal,
+    FarmTarget,
     ensure_farm_columns,
 )
 from gitd.models.base import Base, SessionLocal, engine
@@ -35,7 +37,15 @@ _TABLES = (
     FarmPublication.__table__,
     FarmOutbox.__table__,
     FarmCommentCache.__table__,
+    FarmTarget.__table__,
 )
+
+#: A niche account is not opened again for an oriented run before this many
+#: days (warming-policy.md §7 bis, "D'où viennent les comptes").
+TARGET_COOLDOWN_DAYS = 14
+#: Order of preference when picking today's doors: what OFMAI's radar served,
+#: then what a run discovered in a "following" list, then hand-typed handles.
+TARGET_SOURCES = ("radar", "following", "manual")
 
 
 def init() -> None:
@@ -291,6 +301,98 @@ class FarmSession:
             bridge.flush_now()
         except Exception:  # noqa: BLE001 — a missing daemon is not a failed signal
             pass
+
+
+# ── Targets of the oriented warm-up (warming-policy.md §7 bis) ────────────────
+
+
+def _bare_handle(handle: str) -> str:
+    return handle.strip().lstrip("@").lower()
+
+
+def get_target(db: Session, account: FarmAccount, handle: str) -> FarmTarget | None:
+    return db.execute(
+        select(FarmTarget).where(FarmTarget.account_id == account.id, FarmTarget.handle == _bare_handle(handle))
+    ).scalar_one_or_none()
+
+
+def record_target(
+    db: Session, account: FarmAccount, handle: str, source: str, *, now: datetime | None = None, commit: bool = True
+) -> FarmTarget | None:
+    """Upsert one known niche account. A handle already known keeps its source
+    and its play history; only ``last_seen`` moves. Returns ``None`` for an
+    empty handle."""
+    bare = _bare_handle(handle)
+    if not bare:
+        return None
+    if source not in TARGET_SOURCES:
+        raise ValueError(f"unknown target source {source!r} (known: {', '.join(TARGET_SOURCES)})")
+    stamp = (now or local_now(account)).isoformat(timespec="seconds")
+    row = get_target(db, account, bare)
+    if row:
+        row.last_seen = stamp
+    else:
+        row = FarmTarget(
+            account_id=account.id,
+            handle=bare,
+            platform=account.platform,
+            source=source,
+            first_seen=stamp,
+            last_seen=stamp,
+        )
+        db.add(row)
+    if commit:
+        db.commit()
+    return row
+
+
+def record_discovered(db: Session, account: FarmAccount, handle: str, *, now: datetime | None = None) -> FarmTarget | None:
+    """A niche account met in the "following" list of another one during a run."""
+    return record_target(db, account, handle, "following", now=now)
+
+
+def mark_played(db: Session, account: FarmAccount, handle: str, *, now: datetime | None = None) -> FarmTarget | None:
+    """The run happened: stamp ``last_played`` and count it. A handle never
+    recorded (typed by hand in ``farm_accounts.niche``) enters as ``manual`` so
+    the same cooldown applies to it from now on."""
+    row = record_target(db, account, handle, "manual", now=now, commit=False)
+    if row is None:
+        return None
+    row.last_played = (now or local_now(account)).isoformat(timespec="seconds")
+    row.plays = (row.plays or 0) + 1
+    db.commit()
+    return row
+
+
+def pick_targets(
+    db: Session,
+    account: FarmAccount,
+    n: int,
+    *,
+    cooldown_days: int = TARGET_COOLDOWN_DAYS,
+    day: date | None = None,
+) -> list[str]:
+    """Up to ``n`` bare handles never played, or played more than ``cooldown_days`` ago.
+
+    Radar accounts first, then the ones discovered in a following list, then
+    the hand-typed ones; inside a source the order is shuffled with the same
+    ``(account, day)`` seed as the daily budget, so every session of the day
+    walks the same list — and since ``mark_played`` removes what a session
+    opened, the next session of the day starts where the previous one stopped.
+    """
+    if n <= 0:
+        return []
+    day = day or local_today(account)
+    limit = datetime.combine(day, datetime.min.time()) - timedelta(days=cooldown_days)
+    rows = list(db.execute(select(FarmTarget).where(FarmTarget.account_id == account.id)).scalars())
+    fresh = [r for r in rows if not r.last_played or datetime.fromisoformat(r.last_played) < limit]
+    rng = random.Random(policy._seed("targets", account_key(account), day.isoformat()))
+    picked: list[str] = []
+    for source in TARGET_SOURCES:
+        bucket = sorted((r.handle for r in fresh if r.source == source))
+        rng.shuffle(bucket)
+        picked.extend(bucket)
+    return picked[:n]
 
 
 def clear_health(db: Session, account: FarmAccount, reason: str) -> None:

@@ -9,7 +9,7 @@ from __future__ import annotations
 
 from typing import Optional
 
-from sqlalchemy import Integer, Text, text
+from sqlalchemy import Integer, Text, UniqueConstraint, text
 from sqlalchemy.orm import Mapped, mapped_column
 
 from gitd.models.base import Base
@@ -150,6 +150,32 @@ class FarmCommentCache(Base):
     text_: Mapped[str] = mapped_column("text", Text, nullable=False)
     fetched_at: Mapped[str] = mapped_column(Text, nullable=False, server_default=text("(datetime('now'))"))
     used_at: Mapped[Optional[str]] = mapped_column(Text)
+
+
+class FarmTarget(Base):
+    """One niche account this farm account may open for an oriented run.
+
+    The memory of the oriented warm-up (``warming-policy.md`` §7 bis): who is
+    known, where it came from, when it was last played. ``source`` is ``radar``
+    (served by ``GET /api/farm/targets``, §3.7), ``following`` (found in the
+    "following" list of a radar account during a run) or ``manual`` (an
+    ``@handle`` typed by hand in ``farm_accounts.niche``, recorded the first
+    time it is played). ``ledger.pick_targets`` never hands a handle back
+    before its cooldown has run out.
+    """
+
+    __tablename__ = "farm_targets"
+    __table_args__ = (UniqueConstraint("account_id", "handle", name="uq_farm_targets_account_handle"),)
+
+    id: Mapped[int] = mapped_column(Integer, primary_key=True, autoincrement=True)
+    account_id: Mapped[int] = mapped_column(Integer, nullable=False, index=True)
+    handle: Mapped[str] = mapped_column(Text, nullable=False)  # bare, lowercase, no "@"
+    platform: Mapped[str] = mapped_column(Text, nullable=False)
+    source: Mapped[str] = mapped_column(Text, nullable=False, server_default=text("'radar'"))
+    first_seen: Mapped[str] = mapped_column(Text, nullable=False)  # ISO datetime, account-local
+    last_seen: Mapped[str] = mapped_column(Text, nullable=False)  # refreshed each time OFMAI serves it again
+    last_played: Mapped[Optional[str]] = mapped_column(Text)  # ISO datetime, account-local
+    plays: Mapped[int] = mapped_column(Integer, nullable=False, server_default=text("0"))
 
 
 # Columns added to a farm table AFTER it first shipped. ``create_all()`` only

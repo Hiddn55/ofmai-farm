@@ -78,10 +78,12 @@ class PhaseCaps:
 
 
 CAPS: dict[Phase, PhaseCaps] = {
-    Phase.CONSUME: PhaseCaps(0, 0, 0, 0, 0, 20, 4, 2, (15, 40), (2, 3)),
-    Phase.LIGHT: PhaseCaps(25, 6, 3, 0, 0, 30, 8, 3, (20, 50), (2, 3)),
-    Phase.NETWORK: PhaseCaps(50, 10, 12, 3, 3, 40, 20, 4, (30, 60), (2, 4)),
-    Phase.CRUISE: PhaseCaps(80, 15, 15, 8, 7, 60, 30, 5, (30, 60), (2, 4)),
+    # `searches` also pays for the oriented Reels runs (warming-policy.md §7 bis):
+    # 2-3 niche accounts per session, 2-4 sessions a day
+    Phase.CONSUME: PhaseCaps(0, 0, 0, 0, 0, 20, 4, 8, (15, 40), (2, 3)),
+    Phase.LIGHT: PhaseCaps(25, 6, 3, 0, 0, 30, 8, 8, (20, 50), (2, 3)),
+    Phase.NETWORK: PhaseCaps(50, 10, 12, 3, 3, 40, 20, 8, (30, 60), (2, 4)),
+    Phase.CRUISE: PhaseCaps(80, 15, 15, 8, 7, 60, 30, 6, (30, 60), (2, 4)),
 }
 
 # TikTok is harsher on multi-account detection: each phase lasts 3 more days.

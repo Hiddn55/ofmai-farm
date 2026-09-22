@@ -475,6 +475,7 @@ def test_a_pass_older_than_the_tolerance_is_skipped_not_caught_up():
 def test_a_rest_day_answers_nobody():
     db = _fresh_db()
     acc = None
+    others = []
     for i in range(60):
         candidate = ledger.add_account(
             db,
@@ -486,7 +487,15 @@ def test_a_rest_day_answers_nobody():
         if ledger.budget_for(candidate).rest_day:
             acc = candidate
             break
+        others.append(candidate)
     assert acc is not None, "no resting account could be built"
+    # the non-resting candidates would be scheduled by tick() below and fail the
+    # assertion for the wrong reason: drop them now — AFTER the resting one got
+    # its row id (SQLite hands a deleted last id to the next insert, which would
+    # repeat the same draw forever)
+    for other in others:
+        db.delete(other)
+    db.commit()
     _pools(db, acc)
     assert ledger.budget_for(acc).caps[policy.COMMENT_REPLY] == 0
     day = ledger.local_today(acc)

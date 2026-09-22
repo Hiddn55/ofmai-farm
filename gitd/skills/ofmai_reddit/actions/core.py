@@ -152,7 +152,8 @@ class RedditAdapter:
     def _footer(self, xml: str) -> tuple[int, int, int, int] | None:
         """Bounds of the topmost post footer that is on screen."""
         h = self.human.screen.height
-        boxes = [b for n in self._nodes("post_footer", xml) if (b := _bounds_of(n)) and 0 <= b[1] and b[3] <= h]
+        # a recycled card leaves a [0,0][0,0] footer in the tree (seen 2026-09-22): never that one
+        boxes = [b for n in self._nodes("post_footer", xml) if (b := _bounds_of(n)) and 0 <= b[1] and b[3] <= h and b[3] > b[1] and b[2] > b[0]]
         boxes.sort(key=lambda b: b[1])
         return boxes[0] if boxes else None
 
@@ -238,7 +239,7 @@ class RedditAdapter:
             self.human.pause(0.8)
         xml = self.dump()
         if not self.on_feed(xml):
-            self._tap_el("home_tab", xml)
+            self._tap_el("home_tab", self._reveal_bars("home_tab"))
             self.human.pause(2.0)
             xml = self.dump()
         return self.on_feed(xml)
@@ -334,8 +335,44 @@ class RedditAdapter:
             return True
         if self.last_gesture_silent:
             return False
+        # most cards carry no Join button (0 of 12 on 2026-09-22): from the post
+        # page, the community's own page always does — its title opens it
+        if self._nodes("page_title", xml) and self._join_from_community(xml):
+            return True
+        if self.last_gesture_silent:
+            return False
         self.back_to_feed()
         return self._join_here(self.dump())
+
+    def _join_from_community(self, page: str) -> bool:
+        """Post page → community page (its title) → Join, proven by Joined."""
+        title = next(iter(self._nodes("page_title", page)), None)
+        c = center(title) if title else None
+        if not c:
+            return False
+        self.human.tap(*c)
+        self.human.pause(2.0)
+        comm = self.dump()
+        btn = next(iter(self._nodes("community_join_button", comm)), None)
+        label = (_desc_of(btn) or _text_of(btn)).strip().lower() if btn else ""
+        bc = center(btn) if btn else None
+        if not bc or not label.startswith("join "):
+            self.device.back()
+            return False  # no button, or a member already ("Joined", "Leave"): never leave
+        self.human.tap(*bc)
+        self.human.pause(1.5)
+        after = self.dump()
+        if self._settle(after):
+            self.human.pause(1.0)
+            after = self.dump()
+        btn2 = next(iter(self._nodes("community_join_button", after)), None)
+        label2 = (_desc_of(btn2) or _text_of(btn2)).strip().lower() if btn2 else ""
+        joined = bool(label2) and not label2.startswith("join ")
+        self.device.back()  # back to the post page
+        if joined:
+            return True
+        self.last_gesture_silent = True
+        return False
 
     def _join_here(self, xml: str) -> bool:
         node = next(iter(self._nodes("join_button", xml)), None)
@@ -403,8 +440,7 @@ class RedditAdapter:
             if self._settle(xml):
                 continue
             self.device.back(delay=0.8)
-        xml = self.dump()
-        self._tap_el("home_tab", xml)
+        self._tap_el("home_tab", self._reveal_bars("home_tab"))
         self.human.pause(1.5)
 
     def detour(self, kind: str, query: str | None) -> bool:
@@ -412,8 +448,20 @@ class RedditAdapter:
             return self._search(query)
         return False  # no stories on Reddit
 
-    def _search(self, query: str) -> bool:
+    def _reveal_bars(self, name: str) -> str:
+        """Reddit hides its top and bottom bars while the feed scrolls down: a
+        short scroll up brings them back. Returns the tree once `name` is visible."""
         xml = self.dump()
+        for _ in range(2):
+            if self._find(name, xml):
+                return xml
+            self.human.swipe_feed("down")
+            self.human.pause(1.0)
+            xml = self.dump()
+        return xml
+
+    def _search(self, query: str) -> bool:
+        xml = self._reveal_bars("search_icon")
         if not self._tap_el("search_icon", xml):
             return False
         self.human.pause(1.5)
@@ -437,7 +485,7 @@ class RedditAdapter:
 
         Called at the end of a session, from the feed. Comes back to the feed.
         """
-        xml = self.dump()
+        xml = self._reveal_bars("profile_tab")
         if not self._tap_el("profile_tab", xml):
             return None
         self.human.pause(2.5)

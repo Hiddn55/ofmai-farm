@@ -3,6 +3,8 @@ comment_reply, dm_reply."""
 
 from __future__ import annotations
 
+import math
+
 import re
 
 from gitd.farm import ledger, policy
@@ -36,6 +38,17 @@ class InstagramWarmAction(WarmSessionAction):
     platform = "instagram"
     adapter_factory = staticmethod(InstagramAdapter)
     default_detours = ("search", "stories")
+    # the home feed is photos and short Reels: a post is looked at for 2-6 s,
+    # a Reel watched for 10-15, never a minute (the default profile is TikTok's
+    # rhythm; measured on the explorer 2026-09-22: 3 posts in 3 minutes)
+    profile_overrides = {
+        "watch_mu": math.log(3.5),
+        "watch_sigma": 0.5,
+        "skip_rate": 0.25,
+        "linger_rate": 0.06,
+        "linger_mu": math.log(12.0),
+        "linger_sigma": 0.3,
+    }
 
 
 class WarmSession(Workflow):
@@ -82,9 +95,10 @@ class PostReelAction(Action):
         _, sleep = clock()  # real time, or virtual under FARM_FAST=1 (dry run)
         human = HumanInput(self.device, SessionProfile.generate(), sleep=sleep)
         adapter = InstagramAdapter(self.device, self.elements, human)
-        self.device.adb("shell", "monkey", "-p", PKG, "-c", "android.intent.category.LAUNCHER", "1")
-        sleep(4)
-        self.device.dismiss_popups(self.device.dump_xml())
+        # the app reopens where it was left (a profile, a post): the "+" only
+        # exists on the home feed, so reach it first
+        if not adapter.open_feed():
+            return ActionResult(success=False, error="home feed not reachable")
         xml = self.device.dump_xml()
         if not adapter._tap_el("create_tab", xml):
             return ActionResult(success=False, error="Create tab not found")
@@ -172,9 +186,10 @@ class PostPhotoAction(Action):
         _, sleep = clock()  # real time, or virtual under FARM_FAST=1 (dry run)
         human = HumanInput(self.device, SessionProfile.generate(), sleep=sleep)
         adapter = InstagramAdapter(self.device, self.elements, human)
-        self.device.adb("shell", "monkey", "-p", PKG, "-c", "android.intent.category.LAUNCHER", "1")
-        sleep(4)
-        self.device.dismiss_popups(self.device.dump_xml())
+        # the app reopens where it was left (a profile, a post): the "+" only
+        # exists on the home feed, so reach it first
+        if not adapter.open_feed():
+            return ActionResult(success=False, error="home feed not reachable")
         xml = self.device.dump_xml()
         if not adapter._tap_el("create_tab", xml):
             return ActionResult(success=False, error="Create tab not found")
@@ -266,9 +281,10 @@ class PostStoryAction(Action):
         _, sleep = clock()  # real time, or virtual under FARM_FAST=1 (dry run)
         human = HumanInput(self.device, SessionProfile.generate(), sleep=sleep)
         adapter = InstagramAdapter(self.device, self.elements, human)
-        self.device.adb("shell", "monkey", "-p", PKG, "-c", "android.intent.category.LAUNCHER", "1")
-        sleep(4)
-        self.device.dismiss_popups(self.device.dump_xml())
+        # the app reopens where it was left (a profile, a post): the "+" only
+        # exists on the home feed, so reach it first
+        if not adapter.open_feed():
+            return ActionResult(success=False, error="home feed not reachable")
         xml = self.device.dump_xml()
         if not adapter._tap_el("create_tab", xml):
             return ActionResult(success=False, error="Create tab not found")

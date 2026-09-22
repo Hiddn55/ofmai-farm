@@ -8,6 +8,8 @@ account is at least 31 days old with 100+ karma (docs/social/warming-policy.md
 
 from __future__ import annotations
 
+import math
+
 from gitd.farm.replykit import CommentReplyAction
 from gitd.farm.skillkit import WarmSessionAction
 from gitd.skills.base import Action, EngineConfig, Workflow
@@ -19,6 +21,16 @@ class RedditWarmAction(WarmSessionAction):
     platform = "reddit"
     adapter_factory = staticmethod(RedditAdapter)
     default_detours = ("search",)  # no stories on Reddit
+    # a card of the feed is glanced at in 1-4 s, read in 6-8 s, never stared at
+    # for twenty (seen on the explorer, 2026-09-22 — a human would have scrolled)
+    profile_overrides = {
+        "watch_mu": math.log(2.4),
+        "watch_sigma": 0.55,
+        "skip_rate": 0.30,
+        "linger_rate": 0.05,
+        "linger_mu": math.log(9.0),
+        "linger_sigma": 0.35,
+    }
 
 
 class WarmSession(Workflow):

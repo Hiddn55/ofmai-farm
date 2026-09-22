@@ -757,3 +757,60 @@ def test_a_pass_tells_ofmai_which_texts_it_really_typed(monkeypatch, db):
     assert payload["replies_used"] == ["100 percent ai"]
     assert payload["replies"] == 1
     assert payload["handle"] == acc.handle and payload["session_id"]
+
+
+def _tt_sheet(comments, *, own_caption=None):
+    """The TikTok 46.8.2 comments sheet as the explorer dumped it (2026-09-22).
+
+    A comment row is author `title`, body `f41`, time `enj`, then "Reply". The
+    sheet of one's own video opens on a caption header — `title`, caption
+    `f6u`, "3d ago" in `desc` — with no Reply link under it.
+    """
+    rid = "com.zhiliaoapp.musically:id/"
+    nodes = ['<node text="‎9 comments" resource-id="' + rid + 'wd2" bounds="[247,436][414,507]"/>']
+    y = 521
+    if own_caption:
+        nodes += [
+            f'<node text="Jordan Reed" resource-id="{rid}title" bounds="[92,534][210,560]"/>',
+            f'<node text="Creator" resource-id="{rid}en2" bounds="[221,534][292,560]"/>',
+            f'<node text="{own_caption}" resource-id="{rid}f6u" bounds="[92,565][667,594]"/>',
+            f'<node text="‎3d ago" resource-id="{rid}desc" bounds="[92,594][687,638]"/>',
+        ]
+        y = 653
+    for author, body in comments:
+        nodes += [
+            f'<node text="{author}" resource-id="{rid}title" bounds="[103,{y}][221,{y + 26}]"/>',
+            f'<node text="{body}" resource-id="{rid}f41" bounds="[103,{y + 29}][700,{y + 67}]"/>',
+            f'<node text="1s ago" resource-id="{rid}enj" bounds="[103,{y + 74}][161,{y + 98}]"/>',
+            f'<node text="Reply" resource-id="{rid}emb" bounds="[187,{y + 72}][238,{y + 98}]"/>',
+        ]
+        y += 132
+    nodes.append('<node text="Add comment..." resource-id="' + rid + 'ej0" bounds="[118,1277][497,1328]"/>')
+    return "<hierarchy>" + "".join(nodes) + "</hierarchy>"
+
+
+def test_tiktok_adapter_reads_the_comment_rows_the_explorer_showed():
+    xml = _tt_sheet([("Jordan Reed", "nice one"), ("Isabella", "She looks amazing like always")])
+    _, ad = _adapter("ofmai_tiktok", "gitd.skills.ofmai_tiktok.actions.replies.TikTokCommentAdapter", xml)
+    assert [(c.author, c.text) for c in ad.read_comments(xml)] == [
+        ("Jordan Reed", "nice one"),
+        ("Isabella", "She looks amazing like always"),
+    ]
+
+
+def test_tiktok_adapter_never_takes_the_own_caption_header_for_a_comment():
+    """Seen on the explorer (2026-09-22): under its own video the pass read one
+    "comment" — the caption header "Jordan Reed / 3d ago" — and tried to reply
+    to it. A row without a Reply link under it is not a comment."""
+    xml = _tt_sheet([], own_caption="golden hour")
+    _, ad = _adapter("ofmai_tiktok", "gitd.skills.ofmai_tiktok.actions.replies.TikTokCommentAdapter", xml)
+    assert ad.read_comments(xml) == []
+    xml = _tt_sheet([("fan_one", "love this")], own_caption="golden hour")
+    _, ad = _adapter("ofmai_tiktok", "gitd.skills.ofmai_tiktok.actions.replies.TikTokCommentAdapter", xml)
+    assert [(c.author, c.text) for c in ad.read_comments(xml)] == [("fan_one", "love this")]
+
+
+def test_tiktok_adapter_falls_back_to_the_reply_links_once_the_body_id_is_renamed():
+    xml = _tt_sheet([("fan_one", "love this")]).replace("id/f41", "id/zz9")
+    _, ad = _adapter("ofmai_tiktok", "gitd.skills.ofmai_tiktok.actions.replies.TikTokCommentAdapter", xml)
+    assert [(c.author, c.text) for c in ad.read_comments(xml)] == [("fan_one", "love this")]

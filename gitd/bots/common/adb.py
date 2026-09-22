@@ -152,15 +152,18 @@ _DISMISS_EXACT = {"cancel", "dismiss", "discard", "save draft", "don\u2019t allo
 
 # What a GeeLark phone answers once its ADB login has expired (stdout, exit 0)
 SESSION_EXPIRED = "run glogin"
+# What adb itself answers once the cloud transport dropped (stderr, exit 1)
+TRANSPORT_LOST = ("device offline", "not found", "closed")
 
 
 class Device:
     """Encapsulates ADB + XML primitives for one connected Android device."""
 
     # A cloud phone whose ADB login expires (GeeLark: ~10 min) gets a repair
-    # hook — `serial -> bool` — installed by gitd.farm.geelark.install_repair().
-    # On a hang or on the "run glogin" answer, _run repairs the session once
-    # and replays the command. None on a farm of real phones.
+    # hook — `(serial, reason) -> bool`, reason in {"hang", "expired",
+    # "offline"} — installed by gitd.farm.geelark.install_repair(). On a hang,
+    # on the "run glogin" answer or on "device offline", _run repairs the
+    # session once and replays the command. None on a farm of real phones.
     session_repair = None
 
     def __init__(self, serial: str):
@@ -188,10 +191,14 @@ class Device:
             try:
                 r = self._run_once(args, timeout)
             except subprocess.TimeoutExpired:
-                if not repair or not repair(self.serial):
+                # a frozen link: on GeeLark the expired login hangs every
+                # command, glogin included — only a reconnect revives it
+                if not repair or not repair(self.serial, "hang"):
                     raise
                 r = self._run_once(args, timeout)
-            if repair and SESSION_EXPIRED in (r.stdout or "") and repair(self.serial):
+            expired = SESSION_EXPIRED in (r.stdout or "")
+            lost = r.returncode != 0 and any(t in (r.stderr or "") for t in TRANSPORT_LOST)
+            if repair and (expired or lost) and repair(self.serial, "expired" if expired else "offline"):
                 r = self._run_once(args, timeout)
             return r
         except FileNotFoundError as e:

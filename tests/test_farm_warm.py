@@ -142,7 +142,7 @@ def test_lost_feed_is_reported_not_crashed():
             return False
 
     stats, _, adapter = _run(10, adapter=Lost())
-    assert stats.error == "lost the feed"
+    assert stats.error == "unknown screen"  # the three tiers ran (unstuck.py) and none knew the screen
     assert "back" in adapter.events
 
 
@@ -191,3 +191,42 @@ def test_an_adapter_that_does_not_verify_is_never_counted_silent():
     assert stats.silent == 0
     assert stats.health is None
     assert ledger.signals == []
+
+
+def test_an_unreadable_screen_is_scrolled_past_not_escalated():
+    """A card whose video never lets uiautomator settle dumps as "": the loop
+    swipes on (seen on Reddit and Instagram, 2026-09-22) instead of declaring
+    the feed lost; only three in a row reach the recovery tiers."""
+
+    class Flicker(FakeAdapter):
+        def __init__(self):
+            super().__init__()
+            self.n = 0
+
+        def dump(self):
+            self.n += 1
+            return "" if self.n % 3 == 0 else self.screen
+
+    stats, _, adapter = _run(10, adapter=Flicker(), minutes=2)
+    assert stats.error is None
+    assert stats.videos > 5
+
+
+def test_niche_handles_drive_oriented_reels_runs():
+    """"@handle" entries of the niche are the oriented warm-up (warming-policy.md
+    §7 bis): every few feed posts one of them is searched and its Reels
+    watched, each run spending a SEARCH; hashtags keep the old detour, and a
+    handle is not searched twice while others are fresh."""
+    stats, ledger, adapter = _run(2, niche=("@gymshark", "@whitneyysimmons", "fitness"), minutes=30)
+    oriented = [e for e in adapter.events if e[0] == "detour" and e[1] == "search" and str(e[2]).startswith("@")]
+    assert stats.oriented >= 3
+    assert len(oriented) == stats.oriented
+    assert {e[2] for e in oriented[:2]} == {"@gymshark", "@whitneyysimmons"}  # both before any repeat
+    hashtags = [e for e in adapter.events if e[0] == "detour" and e[1] == "search" and not str(e[2]).startswith("@")]
+    assert all(e[2] == "fitness" for e in hashtags)  # a hashtag detour never types a handle
+    assert ledger.tracker.count(policy.SEARCH) == stats.oriented + len(hashtags)
+
+
+def test_a_hashtag_only_niche_keeps_the_old_rhythm():
+    stats, _, adapter = _run(2, niche=("fitness",), minutes=10)
+    assert stats.oriented == 0

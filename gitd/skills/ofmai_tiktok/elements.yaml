@@ -35,10 +35,16 @@ profile_tab:
 # "Like video. 75.7K likes" — the count is in the label
 like_button:
   content_desc: "Like video"
-# "Read or add comments. 344 comments"
+# the same button once lit: "Video liked", no count in the label any more —
+# the number stays in the text node inside the button (3 -> 4, 2026-09-22).
+# The adapter reads the count under either label and never taps this one.
+like_button_liked:
+  content_desc: "Video liked"
+# "Read or add comments. 344 comments" — or "Add 1st comments" when there are none
 comment_button:
   content_desc: "Read or add comments"
-# "Add or remove this video from Favorites." — the count sits in the label too
+# "Add or remove this video from Favorites." — NO count in the label: the
+# number is the text node inside the button's lower part (2026-09-22)
 favorite_button:
   content_desc: "Add or remove this video from Favorites"
 share_button:
@@ -80,11 +86,18 @@ back_button:
   content_desc: "Back"
 
 # -- Search ----------------------------------------------------------------------------------
-# magnifier -> field -> KEYCODE_ENTER; the results play videos: no dump there
+# magnifier -> field -> KEYCODE_ENTER. Two nodes carry the desc "Search" on the
+# feed (2026-09-22): the magnifier top right (y≈86) and the icon of the
+# "Search · <suggestion>" bar at the bottom (y≈1254) — the adapter takes the
+# topmost. On the search page, the text "Search" is the SUBMIT button next to
+# the field, and the field's own text is a rotating placeholder ("Erling
+# Haaland Funny Moments"): the field is found by its class, nothing else.
+# The results dumped fine on 46.8.2 (tabs Top / Users / LIVE / Videos), but a
+# playing thumbnail can still blank them: they are only scrolled.
 search_icon:
   content_desc: "Search"
 search_box:
-  text: "Search"
+  class_name: "android.widget.EditText"
 
 # -- Create / post (verified: Create -> gallery -> Next -> title -> Post -> Post Now)
 upload_button:
@@ -112,15 +125,19 @@ aigc_toggle_on:
   content_desc: "AI-generated content, on"
 
 # -- Own video: comments (comment_reply, E3.2) -------------------------------------------
-# The reply itself was verified (345 -> 346 comments); the ROW ids of the
-# comment list were not mined (obfuscated, R34): the adapter reads the rows by
-# the "Reply" links and the text nodes above them, not by these ids.
+# The reply itself was verified (345 -> 346 comments). Row ids read on 46.8.2
+# (2026-09-22): author `title`, body `f41` (obfuscated — it WILL change), time
+# `enj`, then the "Reply" link. The sheet of one's own video opens on a
+# caption header — `title`, caption `f6u`, "3d ago" in `desc` — which is why
+# `desc` is NOT the body: paired with it, the caption passed for a comment.
+# The adapter keeps a row only when a "Reply" link sits under its body, and
+# falls back to the "Reply" links themselves once `f41` is renamed.
 profile_grid_first_item:
   resource_id: "com.zhiliaoapp.musically:id/cover"
 comment_author_row:
   resource_id: "com.zhiliaoapp.musically:id/title"
 comment_text_row:
-  resource_id: "com.zhiliaoapp.musically:id/desc"
+  resource_id: "com.zhiliaoapp.musically:id/f41"
 
 # -- Inbox / direct messages (dm_reply, E3.3) — NOT exercised (no incoming message)
 dm_thread_row:

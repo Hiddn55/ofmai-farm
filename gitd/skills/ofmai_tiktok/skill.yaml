@@ -82,6 +82,13 @@ popup_detectors:
   - detect: "Add a bio"
     button: "Not now"
     label: "Bio nag"
+  # raised over the own profile the first time it is opened (2026-09-22): a
+  # Save button and no dismiss word — Back closes it. The adapter clears it
+  # itself in read_own_following / open_author; this entry is for the engine.
+  - detect: "Viewer history turned on"
+    button: "_back"
+    label: "Viewer history sheet"
+    method: "back"
 
 default_params:
   workflows:
@@ -112,14 +119,23 @@ default_params:
 
 # R34: the descs of elements.yaml and the gestures of actions/ were exercised
 # on this device, on the explorer account (never a character). Source:
-# docs/social/screens-tiktok-actions.md. The follow was NOT proven there (the
-# node vanished, the profile said Following 0 — a mechanical miss on a 35 px
-# target is the leading explanation): the adapter now taps the lower edge and
-# proves a follow by the own Following count; to be replayed on the explorer.
+# docs/social/screens-tiktok-actions.md. 2026-09-22: the adapter's CODE was
+# replayed gesture by gesture on the explorer. The follow is still NOT
+# proven, and the "mechanical miss" explanation is dead: the tap lands (the
+# feed's "+" vanishes, the profile button turns into "Message" and the
+# "Suggested accounts" strip unfolds) but the own Following count and list
+# stay at 0, even after a force-stop — TikTok drops this account's follows.
+# The adapter reports it silent, which is the canary at work.
 tested_on:
+  - device: "GeeLark explorer-us (Samsung Galaxy S20 emulated, Android 13, 720x1440)"
+    app_version: "46.8.2"
+    date: "2026-09-22"
+    verified: [view, like, save, comment, comment_reply, search, profile_visit]
+    unverified: [follow, dm_reply, aigc_toggle]
+    notes: "adapter code: like 3->4 and 37->38 (label -> 'Video liked'), favourite 1->2, comment 8->9 (sheet header), search Top/Users/Videos tabs, comment_reply pass reads 0 comments under own video; follow swallowed by TikTok (own Following 0 after restart)"
   - device: "GeeLark explorer-us (Samsung Galaxy S20 emulated, Android 13, 720x1440)"
     app_version: "46.8.2"
     date: "2026-09-18"
     verified: [view, like, save, comment, comment_reply, post_video, search, profile_visit]
     unverified: [follow, dm_reply, aigc_toggle]
-    notes: "like 75.7K->75.8K, favourite 3855->3856, comment 344->345, reply 345->346; uiautomator cannot dump a playing video"
+    notes: "by hand: like 75.7K->75.8K, favourite 3855->3856, comment 344->345, reply 345->346; uiautomator cannot dump a playing video"

@@ -27,10 +27,12 @@ Valeurs de `CAPS` dans `policy.py`, par jour et par compte, **avant** le tirage 
 
 | Phase | likes | saves | follows | comments | posts / semaine | story_views | profile_visits | searches | minutes / jour | sessions / jour |
 |---|---|---|---|---|---|---|---|---|---|---|
-| `consume` | 0 | 0 | 0 | 0 | 0 | 20 | 4 | 2 | 15-40 | 2-3 |
-| `light` | 25 | 6 | 3 | 0 | 0 | 30 | 8 | 3 | 20-50 | 2-3 |
-| `network` | 50 | 10 | 12 | 3 | 3 | 40 | 20 | 4 | 30-60 | 2-4 |
-| `cruise` | 80 | 15 | 15 | 8 | 7 | 60 | 30 | 5 | 30-60 | 2-4 |
+| `consume` | 0 | 0 | 0 | 0 | 0 | 20 | 4 | 8 | 15-40 | 2-3 |
+| `light` | 25 | 6 | 3 | 0 | 0 | 30 | 8 | 8 | 20-50 | 2-3 |
+| `network` | 50 | 10 | 12 | 3 | 3 | 40 | 20 | 8 | 30-60 | 2-4 |
+| `cruise` | 80 | 15 | 15 | 8 | 7 | 60 | 30 | 6 | 30-60 | 2-4 |
+
+`searches` monte à 8 (puis 6) depuis le 2026-09-22 : il paie aussi les tours de Reels orientés du §7 bis, 2-3 comptes de la niche par session.
 
 Caps fixés hors tirage (`DailyBudget.build`) : `POST` = 1 par jour dès que `posts_per_week > 0`, sinon 0 (le plafond hebdomadaire est tenu par le ledger, `posts_this_week`, semaine du lundi) ; `VIEW` = 10 000 (borné par le temps de session, pas par le compte) ; `DM_REPLY` = 20 en cruise, 0 avant ; `COMMENT_REPLY` = 20 en network et cruise, 0 avant. Les workflows `comment_reply` / `dm_reply` n'existent pas encore (`docs/FARM.md`, « Not done yet ») : ces deux caps sont réservés. `STORY_VIEW` est budgété sur TikTok mais jamais consommé : le skill TikTok ne connaît que le détour `search` (§7). À coder (E3.4) : une action `STORY_POST` (Instagram seulement, distincte de `POST` et de `STORY_VIEW`), cap 1/jour en `network` et `cruise`, 0 avant, consommée par le workflow `post_story`.
 
@@ -120,6 +122,33 @@ Propensions par phase (`PROPENSITY`, avant le oui/non du ledger) :
  "handle": "sierra.cole", "day_of_life": 20, "phase": "cruise", "profile_seed": 733120544}
 ```
 
+## 7 bis. La chauffe orientée : apprendre la niche à l'algorithme (décision du 2026-09-22)
+
+Une session qui ne fait que défiler le fil prouve qu'on est humain ; elle n'apprend rien à Instagram sur **ce qu'on veut voir**. Or c'est ce que l'algorithme utilisera pour pousser nos propres Reels vers leur audience. La chauffe est donc *orientée* : consommer, dès le jour 1, exactement le contenu de la niche du personnage, et le mesurer.
+
+**Proportion.** ≈ 80 % du temps d'une session dans des Reels de la niche, ≈ 20 % dans le fil et les stories (la boucle du §7, inchangée). Dans le code : tous les `ORIENTED_EVERY = (3, 6)` posts du fil, un tour orienté (`warm.py`).
+
+**Un tour orienté** = une *porte d'entrée* sur un compte de la niche, puis « se perdre » : 5-10 Reels de ce compte, 5-20 s chacun, ~12 % de likes ; puis, une fois sur deux, sa liste « suivis » → un des huit premiers comptes → ses Reels (profondeur 2, `_lose_time_in_a_followed_account`) ; le compte découvert entre dans `farm_targets` (source `following`). Le viewer se quitte par Back, jamais en glissant vers le flux Reels général. **Prouvé sur l'explorateur le 2026-09-22** : Instagram (`@gymshark` → page de résultats → profil → onglet Reels → Reels → suivis → `@allismeltzer` → ses Reels) et TikTok (`@gymshark` → résultats, onglet Users → profil → vidéos). Deux pièges du relevé : un Reel qui joue ne se laisse pas lire par `uiautomator` (un tap le met en pause, sinon on regarde à l'aveugle) ; TikTok entoure les pseudos de marques bidi invisibles (`\u2068gymshark\u2069`).
+
+**Les portes, par phase.**
+- *Jours 1-7* : uniquement des comptes **connus** de la niche (liste radar, entrées `@pseudo` de `farm_accounts.niche`), par la **recherche** : 2-3 par session, jamais deux fois le même dans la session ni deux fois de suite dans la journée. Onglet Reels et Explore : jamais — tant que l'algorithme ne connaît pas la niche, ce sont du bruit qui dilue le signal.
+- *Jours 8-14* (à coder) : l'onglet Reels et le Reel cliqué dans le fil s'ajoutent, mais on ne s'attarde que si le Reel est de la niche — auteur dans le radar (élargi aux comptes découverts), ou mots / hashtags de la niche dans la légende, lus dans l'arbre d'accessibilité ; sinon on passe. Les comptes connus restent la majorité.
+- *Jour 15+* (à coder) : le flux Reels et Explore deviennent la source principale si le score Explore le permet ; sinon on reste en régime « comptes connus ». Un rappel de comptes connus chaque jour.
+- La porte de chaque session est tirée au sort parmi celles autorisées ; jamais le même enchaînement deux sessions de suite.
+
+**D'où viennent les comptes** (depuis le 2026-09-22). Deux sources, dans cet ordre :
+
+1. **Le radar d'OFMAI.** `GET /api/farm/targets?character=<slug ou id>&platform=instagram&limit=30` (`bridge-ofmai-farm.md` §3.7) rend les 30 meilleurs comptes actifs de la niche du personnage (`niche.radar` de la fiche), marché du personnage d'abord, puis score de performance du radar, puis abonnés — pseudos nus, sans `@`. Le pont (`bridge.fetch_targets`) les écrit dans la table `farm_targets` de la ferme (`account_id`, `handle`, `platform`, `source`, `first_seen`, `last_seen`, `last_played`, `plays` ; unique par compte et pseudo) en `source = radar`. Le tick redemande quand il reste moins de 5 portes jouables et que la liste date de plus de 24 h ; une session dont la table est vide demande elle-même une fois.
+2. **Les comptes découverts** : ceux que le bloc « suivis » (à coder) croise pendant un tour entrent par `ledger.record_discovered` en `source = following`.
+
+Au départ de chaque session, `skillkit.session_niche` tire 2-3 portes par `ledger.pick_targets(db, account, n, cooldown_days=14)` — jamais un pseudo joué depuis moins de **14 jours**, radar avant `following` avant les pseudos tapés à la main, dans un ordre mélangé avec la graine `(compte, jour)` du budget (§4) — et les place en tête de la liste `niche` sous la forme `@pseudo`, devant ce que `farm_accounts.niche` contient. La boucle de `warm.py` ne change pas : elle ne voit qu'une liste de `@pseudos` et de `#hashtags`. En fin de session, chaque porte ouverte (`SessionStats.played`) passe par `ledger.mark_played` : `last_played` daté, `plays` incrémenté, et le pseudo sort du tirage jusqu'à la fin du refroidissement — donc jamais deux fois la même porte dans la journée, ni le même enchaînement deux sessions de suite. Elle part aussi dans `session_summary` sous `targets_used`.
+
+Repli : sans pont configuré, ou si OFMAI ne répond pas, ou si le radar n'a rien sur cette plateforme (TikTok aujourd'hui), les `@pseudos` donnés à la main dans `accounts add --niche` (`@gymshark,@…,#gymgirl`) restent les portes, exactement comme avant ; un pseudo manuel joué entre lui aussi dans `farm_targets` (`source = manual`) et subit le même refroidissement. Les `#` gardent le détour de recherche classique.
+
+**Mesure** (depuis le 2026-09-22, `gitd/farm/explore_score.py`) : en fin de session Instagram, après le relevé de karma et sous la même règle R27 (rien après un signal de santé), `WarmSessionAction` ouvre l'onglet « Search and explore », attend le chargement de la grille, garde la capture sous `data/explore/<plateforme>/<pseudo>/<AAAAMMJJ-HHMMSS>.png`, puis demande à un modèle (vision, `claude-opus-5`, l'image en base64 + la niche décrite depuis `farm_accounts.niche` et l'identifiant du personnage) la part de la page qui est du contenu de la niche : un entier 0-100 et une phrase, en JSON, lus strictement (`parse_score`). Le score part dans `session_summary` sous `explore_niche_score` (entier, ou `null` si le modèle n'a pas répondu lisiblement) avec `explore_shot` (chemin de la capture) ; puis retour au fil par l'onglet Home et `back_to_feed`. Sans `ANTHROPIC_API_KEY` (ou `FARM_ADVISOR=1` avec un profil `ant auth login`), rien ne se passe : ni capture, ni clé dans l'événement — même porte que l'advisor du §4 bis des sélecteurs. Aucune erreur de cette mesure ne fait échouer la session. Validation à l'œil au début (les captures sont là pour ça). Passage au régime jour 15+ : score ≥ 60 sur 3 sessions de suite. TikTok n'est pas mesuré : son écran de recherche est une liste de suggestions, pas une grille personnalisée.
+
+**TikTok** : même schéma — recherche et profils d'abord, « Pour toi » ensuite. Reddit : pas de Reels ; rejoindre les subs de la niche et y voter/commenter joue ce rôle.
+
 ## 8. Ce que la plateforme sert à une session : commentaires et cibles du radar
 
 ### 8.1 Pools de commentaires par persona
@@ -158,12 +187,12 @@ Aujourd'hui, la session cherche `#<niche>` et suit ce qui tombe (§7, étapes 5 
 | | Règle |
 |---|---|
 | Source | `TrackedInfluencer` où `niche` = `niche.radar` de la fiche persona (`personas.md` §1), `market = "US"`, `status = "active"`, `enabled = true` |
-| Qui sert | OFMAI, `GET /api/farm/targets?character_id=…&platform=…&n=…` (`bridge-ofmai-farm.md` §3.7) ; le pont les met en cache et le planner les passe dans `params.targets`, exactement comme `params.comments` (§8.1) |
+| Qui sert | OFMAI, `GET /api/farm/targets?character=…&platform=…&limit=30` (`bridge-ofmai-farm.md` §3.7, en place depuis le 2026-09-22) ; le pont les écrit dans `farm_targets` et `skillkit.session_niche` les place en tête de la liste `niche` de chaque session (§7 bis, « D'où viennent les comptes ») |
 | Où ça entre dans la session | le **détour de recherche** (§7, étape 7) : deux recherches sur trois tapent le pseudo d'une cible au lieu d'un hashtag, ouvrent son profil, lisent la bio, font défiler la grille. Cela consomme un `search` et un `profile_visit` ; le **follow** n'a lieu que si `allow(FOLLOW)` passe, ratio ≤ 30 % des visites tenu comme partout (§3) |
 | Ce qui ne change pas | la branche « auteur du feed » (§7, étape 5) : le reste du budget `profile_visit` et `follow` continue d'y passer. Au bout de quelques jours, le feed lui-même est devenu celui de la niche |
 | Volume | plafond `searches` 2 / 3 / 4 / 5 par phase, donc **5 cibles par jour au plus** : une niche de 107 à 211 comptes couvre le mois de chauffe entier, ce qui est exactement ce qu'on lui demande |
 | À égalité | `accountType = "reelle"` d'abord — l'inverse de la sélection de **contenu**, qui préfère `"ia"` (`content-pipeline.md` §4.1) : on reproduit une scène plus facilement depuis un compte IA, mais on ne se construit pas un voisinage fait de clones |
-| Jamais deux fois | une cible servie à un compte ne l'est plus jamais avant 90 jours (`SocialTargetUse`, `@@unique([socialAccountId, handle])`, `bridge-ofmai-farm.md` §5.1) ; réservation 24 h à la livraison, rendue si la session ne l'a pas consommée |
+| Jamais deux fois | la mémoire est côté ferme, pas côté OFMAI : `farm_targets.last_played` (`bridge-ofmai-farm.md` §5.2), `ledger.pick_targets` ne rend jamais un pseudo joué depuis moins de 14 jours (§7 bis). Pas de réservation : OFMAI ne fait que classer |
 | Consommation | remontée dans le résumé de session : `targets_used: [handle…]`, à côté de `comments_used` (`bridge-ofmai-farm.md` §4.1) |
 | Pool épuisé | la route rend une liste vide et le détour retombe sur le hashtag de niche : le comportement d'aujourd'hui est le repli, jamais une erreur |
 

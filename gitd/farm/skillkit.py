@@ -8,6 +8,7 @@ from __future__ import annotations
 
 import logging
 import os
+import random
 from typing import Any, Callable
 
 from gitd.farm import ledger, policy
@@ -17,6 +18,10 @@ from gitd.skills.base import Action, ActionResult
 
 log = logging.getLogger(__name__)
 
+#: Doors of one session (warming-policy.md §7 bis): 2-3 known niche accounts,
+#: drawn from farm_targets, ahead of whatever farm_accounts.niche holds.
+TARGETS_PER_SESSION = (2, 3)
+
 
 def parse_list(raw: Any, sep: str) -> list[str]:
     if isinstance(raw, list):
@@ -24,6 +29,30 @@ def parse_list(raw: Any, sep: str) -> list[str]:
     if not raw:
         return []
     return [x.strip() for x in str(raw).split(sep) if x.strip()]
+
+
+def session_niche(db, account, niche: list[str], n: int) -> list[str]:
+    """The ``niche`` list a session runs on: today's doors first, then the rest.
+
+    ``pick_targets`` reads ``farm_targets`` — filled by the bridge tick from the
+    radar. An account whose table is still empty asks OFMAI once, right here;
+    a bridge that is not configured, or unreachable, changes nothing: the
+    ``@handles`` typed by hand in ``farm_accounts.niche`` are the doors, exactly
+    as before. Nothing is ever listed twice.
+    """
+    picked = ledger.pick_targets(db, account, n)
+    if not picked:
+        from gitd.farm import bridge
+
+        try:
+            if bridge.fetch_targets(db, bridge.OfmaiClient.from_env(), account):
+                picked = ledger.pick_targets(db, account, n)
+        except bridge.BridgeNotConfigured as e:
+            log.info("[warm] no radar targets for @%s: %s", account.handle, e)
+        except Exception as e:  # noqa: BLE001 — a session is never lost over a fetch
+            log.warning("[warm] radar targets not fetched for @%s: %s", account.handle, e)
+    doors = [f"@{h}" for h in picked]
+    return doors + [q for q in niche if q not in doors]
 
 
 class WarmSessionAction(Action):
@@ -35,6 +64,10 @@ class WarmSessionAction(Action):
     platform: str = ""
     adapter_factory: Callable[..., Any] | None = None
     default_detours: tuple[str, ...] = ("search",)
+    # per-platform pacing: SessionProfile.generate(**overrides). A Reddit card
+    # is read in a couple of seconds, a TikTok video is watched — the default
+    # profile (median 6.5 s, lingers up to a minute) is a video feed's rhythm
+    profile_overrides: dict = {}
 
     def __init__(
         self,
@@ -69,16 +102,23 @@ class WarmSessionAction(Action):
         if budget.rest_day:
             return ActionResult(success=True, data={"skipped": "rest day", "day_of_life": budget.day_of_life})
         minutes = self.minutes or max(1.0, budget.session_minutes / max(1, budget.sessions))
-        niche = self.niche or parse_list(acc.niche, ",")
         now, sleep = clock()
-        human = HumanInput(self.device, SessionProfile.generate(self.seed), sleep=sleep)
+        human = HumanInput(self.device, SessionProfile.generate(self.seed, **self.profile_overrides), sleep=sleep)
+        # Today's doors (§7 bis): drawn once per session from the profile seed,
+        # on their own generator so the session's own draws stay untouched.
+        doors = random.Random(human.profile.seed).randint(*TARGETS_PER_SESSION)
+        niche = session_niche(session.db, acc, self.niche or parse_list(acc.niche, ","), doors)
         adapter = self.adapter_factory(self.device, self.elements, human)
+        from gitd.farm import advisor as _advisor
+
         cfg = WarmConfig(
             minutes=minutes,
             phase=budget.phase,
             comments=self.comments,
             niche=niche,
             detour_kinds=self.default_detours,
+            handle=acc.handle,
+            advisor=_advisor.configured(),
         )
         log.info(
             "[warm] @%s %s day %s phase %s — %.1f min, caps %s",
@@ -90,18 +130,42 @@ class WarmSessionAction(Action):
             {k: v for k, v in budget.caps.items() if v and k != policy.VIEW},
         )
         stats = run_session(adapter, human, session, cfg, now=now)
+        # The doors this run opened leave the pool for the cooldown (§7 bis);
+        # OFMAI gets the same list as `targets_used` (bridge-ofmai-farm.md §4.1).
+        for handle in stats.played:
+            ledger.mark_played(session.db, acc, handle)
+        for who in getattr(stats, "discovered", []):  # met in a "Following" list: a niche target from now on
+            ledger.record_discovered(session.db, acc, who)
         data = stats.as_dict() | {
             "handle": acc.handle,
             "day_of_life": budget.day_of_life,
             "phase": budget.phase.value,
             "profile_seed": human.profile.seed,
             "session_id": session.session_id,
+            "targets_used": [h.lstrip("@") for h in stats.played],
         }
         # A health signal ended the session: the account is already under
         # suspicion, we do not walk it through one more screen (R27).
         karma = None if stats.health else read_karma(adapter)
         if karma is not None:
             data["karma"] = karma
+        # ── explore score (warming-policy.md §7 bis, "Mesure") ─────────────
+        # Same R27 rule as the karma: nothing after a health signal. Absent
+        # without a model; a scorer set on the class (tests) wins over env.
+        if not stats.health:
+            from gitd.farm import explore_score
+
+            data.update(
+                explore_score.measure(
+                    adapter,
+                    self.platform,
+                    acc.handle,
+                    niche,
+                    character=acc.character_id,
+                    scorer=getattr(self, "explore_scorer", None),
+                )
+            )
+        # ── end explore score ──────────────────────────────────────────────
         _queue_session_summary(session, data)
         if stats.health:
             return ActionResult(success=False, error=f"health signal: {stats.health}", data=data)

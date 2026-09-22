@@ -189,14 +189,14 @@ def test_an_expired_geelark_login_is_repaired_and_the_command_replayed(monkeypat
     state = _expiring_adb(monkeypatch, hang_first=hang_first)
     repaired_serials = []
 
-    def repair(serial):
-        repaired_serials.append(serial)
+    def repair(serial, reason):
+        repaired_serials.append((serial, reason))
         state["repaired"] = True
         return True
 
     monkeypatch.setattr(Device, "session_repair", staticmethod(repair))
     assert Device("1.2.3.4:20056").adb("shell", "echo", "ok") == "ok"
-    assert repaired_serials == ["1.2.3.4:20056"]
+    assert repaired_serials == [("1.2.3.4:20056", "hang" if hang_first else "expired")]
     assert len(state["calls"]) == 2  # the failed call, then its replay
 
 
@@ -213,7 +213,36 @@ def test_a_failed_repair_does_not_loop(monkeypatch):
     from gitd.bots.common.adb import ADBError, Device
 
     state = _expiring_adb(monkeypatch, hang_first=True)
-    monkeypatch.setattr(Device, "session_repair", staticmethod(lambda serial: False))
+    monkeypatch.setattr(Device, "session_repair", staticmethod(lambda serial, reason: False))
     with pytest.raises(ADBError, match="timed out"):
         Device("1.2.3.4:20056").adb("shell", "echo", "ok")
     assert len(state["calls"]) == 1
+
+
+def test_a_dropped_cloud_transport_is_repaired_too(monkeypatch):
+    """"adb: device offline" (exit 1) after the GeeLark link dropped — seen on
+    the explorer 2026-09-22 — is repaired and replayed like an expired login."""
+    from types import SimpleNamespace
+
+    from gitd.bots.common.adb import Device
+
+    state = {"repaired": False, "calls": 0}
+
+    def fake_run(argv, *a, **k):
+        state["calls"] += 1
+        if not state["repaired"]:
+            return SimpleNamespace(returncode=1, stdout="", stderr="adb: device offline\n")
+        return SimpleNamespace(returncode=0, stdout="ok\n", stderr="")
+
+    reasons = []
+
+    def repair(serial, reason):
+        reasons.append(reason)
+        state["repaired"] = True
+        return True
+
+    monkeypatch.setattr(subprocess, "run", fake_run)
+    monkeypatch.setattr(Device, "session_repair", staticmethod(repair))
+    assert Device("1.2.3.4:20135").adb("shell", "echo", "ok") == "ok"
+    assert state["calls"] == 2
+    assert reasons == ["offline"]
