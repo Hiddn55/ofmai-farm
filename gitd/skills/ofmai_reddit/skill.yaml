@@ -1,8 +1,7 @@
 name: ofmai_reddit
 display_name: OFMAI Reddit
-description: Reddit warming for OFMAI characters — humanised, budgeted by the farm ledger. Publishing happens through the API, never from the device.
-version: "0.1.0"
-# [to verify on the device] the official Android client's package id
+description: Reddit warming for OFMAI characters — humanised, budgeted by the farm ledger, every gesture verified on screen. Publishing happens through the API, never from the device.
+version: "0.2.0"
 app_package: com.reddit.frontpage
 author: OFMAI
 license: MIT
@@ -35,7 +34,18 @@ exports:
 # the API, and only once the account is at least 31 days old with 100+ karma
 # (docs/social/warming-policy.md §10, publishing.md §5).
 
+# Every detector below was met on the device (docs/social/screens-reddit.md,
+# screens-reddit-actions.md). `button` is matched on text or content-desc.
 popup_detectors:
+  - detect: "Can't create passkey"
+    button: "OK"
+    label: "Passkey dialog — expected on a cloud phone (no Google account, no screen lock)"
+  - detect: "Welcome to the"
+    button: "Got it"
+    label: "Welcome sheet of a community just joined"
+  - detect: "Are you enjoying Reddit?"
+    button: "Not really"
+    label: "Satisfaction survey — lands on top of the welcome sheet and swallows its button"
   - detect: "Turn on notifications"
     button: "Not now"
     label: "Notifications popup"
@@ -70,4 +80,12 @@ default_params:
 # matched by gitd/farm/health.py, not here: they end the session instead of
 # being dismissed.
 
-tested_on: []
+# R34: the selectors of elements.yaml and the gestures of actions/ were read
+# from uiautomator dumps and exercised on this device, on the explorer account
+# (never a character). Source: docs/social/screens-reddit-actions.md.
+tested_on:
+  - device: "GeeLark explorer-us (Samsung Galaxy S20 emulated, Android 13, 720x1440)"
+    app_version: "2026.35.0"
+    date: "2026-09-19"
+    verified: [view, like, save, open_author, follow, comment, comment_reply, search, profile, read_karma]
+    notes: "vote proven by the arrow colour; join by Join->Joined; save by Unsave; comment by the counter"

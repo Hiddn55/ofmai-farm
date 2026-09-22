@@ -216,8 +216,9 @@ def _cruising_reddit_account(db):
         )
         if not ledger.budget_for(acc).rest_day:
             return acc
-        db.delete(acc)
-        db.commit()
+        # keep the resting row: deleting it hands the next insert the SAME id
+        # (SQLite reuses it), hence the same seed and the same rest-day draw —
+        # the loop would spin on one account forever on the wrong weekday
     raise AssertionError("could not build a non-rest-day Reddit account")  # pragma: no cover
 
 

@@ -3,10 +3,10 @@ display_name: OFMAI Reddit signup
 description: >-
   Creates one Reddit account on a character's own phone, by email, with a human
   at every gate, and turns on the two adult-content settings. Day 7 of the phone
-  — docs/social/account-creation.md §6.4.
-version: "0.1.0"
+  — docs/social/account-creation.md §6.4. The thirteen screens of the flow were
+  walked on a device: docs/social/screens-reddit.md.
+version: "0.2.0"
 kind: hard
-# [to verify on the device] the official Android client's package id
 app_package: com.reddit.frontpage
 android_package: com.reddit.frontpage
 platforms:
@@ -16,9 +16,10 @@ license: MIT
 
 health_platform: reddit
 
-# Reddit verifies by LINK, not by code (account-creation.md §4.3): the `email`
-# checkpoint of this skill asks a human to open the notification, tap the link,
-# and come back through the recents — not to type six digits.
+# Reddit verifies by a 6-digit CODE typed in a single field (screen 4) — not by
+# a link, which is what the first draft of this skill assumed. The `email`
+# checkpoint asks a human to read it in the character's mailbox and type it.
+# No phone number and no captcha were asked on the device (2026-09-16).
 exports:
   workflows:
     - name: recorded
@@ -27,16 +28,26 @@ exports:
         email: { type: string, required: true }
         handle: { type: string, required: true }
         name: { type: string, required: true }
+        birthday_us: { type: string, required: true, description: "MMDDYYYY, eight digits, no separator — the persona sheet's birthday, 18+ (R2)" }
         bio: { type: string, required: true, description: "persona sheet, ASCII, 200 chars, 18+, no link (R12, R22)" }
         niche: { type: string, required: true, description: "3-5 topics of the character's niche, for the onboarding picker" }
 
+# `button` is matched on text or content-desc, exactly. Detectors run after
+# every step, which is how the two dialogs that follow the password (screens 7
+# and 8) are handled without a step of their own.
 popup_detectors:
-  - detect: "Turn on notifications"
-    button: "Not now"
-    label: "Notifications popup"
+  - detect: "Can't create passkey"
+    button: "OK"
+    label: "Passkey dialog — expected on a cloud phone (no Google account, no screen lock)"
+  - detect: "send you notifications"
+    button: "Allow"
+    label: "Android notifications permission — ALLOWED: get_notifications reads the codes there (account-creation.md §4.3)"
+  - detect: "send you notifications"
+    button: "ALLOW"
+    label: "Same permission, uppercase button"
   - detect: "Allow Reddit to access"
     button: "Don't allow"
-    label: "Permission request"
+    label: "Any other permission request"
   - detect: "Get the app experience"
     button: "Not now"
     label: "Onboarding nag"
@@ -47,4 +58,10 @@ popup_detectors:
     button: "Skip"
     label: "Follow suggestions — never a follow at creation (R16)"
 
-tested_on: []
+# R34: walked end to end on the explorer profile, never on a character.
+tested_on:
+  - device: "GeeLark explorer-us (Samsung Galaxy S20 emulated, Android 13, 720x1440)"
+    app_version: "2026.35.0"
+    date: "2026-09-16"
+    verified: [get_started, continue_with_email, email, code, username, password, passkey_dialog, notifications_permission, birthday, gender, interests, feed]
+    notes: "no captcha, no phone; the username field arrives pre-filled; the settings/profile screens are still a human step"

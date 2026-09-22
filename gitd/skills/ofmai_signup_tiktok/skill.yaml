@@ -1,9 +1,12 @@
 name: ofmai_signup_tiktok
 display_name: OFMAI TikTok signup
 description: >-
-  Creates one TikTok account on a character's own phone, by email, with a human
-  at every gate. Day 3 of the phone — docs/social/account-creation.md §6.2.
-version: "0.1.0"
+  Creates one TikTok account on a character's own phone, BY ITS OWN US LINE,
+  with a human at every gate. Day 3 of the phone — docs/social/account-creation.md
+  §6.2 and §4 ter. Walked on a device: an email signup is accepted then blocked
+  behind "link your phone number" with no way back; the phone-first flow created
+  @jordan.reed90 on 2026-09-18 (screens-tiktok-actions.md §6).
+version: "0.2.0"
 kind: hard
 app_package: com.zhiliaoapp.musically
 android_package: com.zhiliaoapp.musically
@@ -21,9 +24,10 @@ health_platform: tiktok
 exports:
   workflows:
     - name: recorded
-      description: TikTok signup by email, human gates
+      description: TikTok signup by the character's own US line, human gates
       params:
-        email: { type: string, required: true }
+        phone: { type: string, required: true, description: "the character's own US line, digits only, never shared (account-creation.md §4 ter)" }
+        email: { type: string, required: true, description: "the character's own mailbox, only if TikTok asks for a recovery address" }
         handle: { type: string, required: true }
         name: { type: string, required: true }
         birthday: { type: string, required: true, description: "YYYY-MM-DD, 18+ (R2)" }
@@ -53,4 +57,11 @@ popup_detectors:
     label: "Feed tutorial"
     method: "back"
 
-tested_on: []
+# R34: walked on the explorer profile, never on a character. The profile
+# editor and the privacy screens were not mined and stay "verified": false.
+tested_on:
+  - device: "GeeLark explorer-us (Samsung Galaxy S20 emulated, Android 13, 720x1440)"
+    app_version: "46.8.2"
+    date: "2026-09-18"
+    verified: [sign_up, use_phone_or_email, birthday_wheel, phone_tab, send_code, sms, password, nickname_derives_username, feed]
+    notes: "email-first is a dead end (link your phone number, no Back); a reused number is refused ('already taken'); no captcha on the phone-first run"

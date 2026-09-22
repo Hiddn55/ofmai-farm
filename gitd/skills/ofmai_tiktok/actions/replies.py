@@ -1,10 +1,15 @@
 """TikTok reply adapters: under one's own video, and in the inbox.
 
-Same shape as the Instagram ones. Selectors come from the en-US accessibility
-labels and **none has been seen on a device** (R34); the unknown resource ids
-live in ``elements.yaml`` (``profile_grid_first_item``, ``comment_author_row``,
-``comment_text_row``, ``dm_thread_row``, ``dm_message_row``, ``dm_input``,
-``dm_send``).
+Same shape as the Instagram ones. What the device confirmed (GeeLark
+``explorer-us``, TikTok 46.8.2, 2026-09-18, screens-tiktok-actions.md §3):
+``Reply`` under a comment opens the same composer as a new comment, and the
+reply is proven by the comment counter (345 -> 346) or by the text showing in
+the sheet. The send arrow has NO label: it is the (657, 858) point of
+``elements.yaml`` (keyboard open), scaled to the screen. The row ids of the
+comment list are obfuscated and were not mined (R34): ``read_comments`` keeps
+the mixin's id-based pairing for builds that expose them, and falls back to
+the "Reply" links, pairing each with the text right above it. The DM adapter
+was NOT exercised (no incoming message on a new account).
 """
 
 from __future__ import annotations
@@ -46,7 +51,7 @@ class TikTokCommentAdapter(CommentRowsMixin, TikTokAdapter):
         self.human.pause(3.0)
         post = self.dump()
         key = post_key(self._post_label(post))
-        if not (self._tap_desc(post, "Comment") or self._tap_el("comment_button", post)):
+        if not (self._tap_el("comment_button", post) or self._tap_desc(post, "Comment")):
             return None
         self.human.pause(2.0)
         return key
@@ -70,6 +75,31 @@ class TikTokCommentAdapter(CommentRowsMixin, TikTokAdapter):
                 return d
         return ""
 
+    def read_comments(self, xml: str) -> list[Comment]:
+        rows = super().read_comments(xml)
+        if rows:
+            return rows
+        # obfuscated ids: each "Reply" link belongs to the comment right above it,
+        # whose author is the text node above the body
+        out: list[Comment] = []
+        texts = []
+        for n in nodes_where(xml, text=""):
+            t = _text(n).strip()
+            c = center(n)
+            if t and c and t.lower() not in ("reply", "view replies", "add comment...") and not re.match(r"^\d[\d.,]*[km]?$", t.lower()):
+                texts.append((c[1], t))
+        texts.sort()
+        for link in nodes_where(xml, text="Reply"):
+            lc = center(link)
+            if not lc:
+                continue
+            above = [(y, t) for y, t in texts if 0 < lc[1] - y <= 220]
+            if len(above) < 2:
+                continue
+            (_, author), (by, body) = above[-2], above[-1]
+            out.append(Comment(author=author.lstrip("@"), text=body, y=by))
+        return out
+
     def reply_to_comment(self, comment: Comment, text: str, xml: str) -> bool:
         if not tap_in_row(self.human, xml, comment.y, text="Reply"):
             return False
@@ -78,10 +108,7 @@ class TikTokCommentAdapter(CommentRowsMixin, TikTokAdapter):
         if not (self._tap_el("comment_input", sheet) or self._tap_text(sheet, "Add comment")):
             return False
         self.human.pause(0.6)
-        self.human.type_text(text)
-        posted = self.dump()
-        ok = self._tap_el("comment_send", posted) or self._tap_desc(posted, "Post")
-        self.human.pause(1.5)
+        ok = self._send_comment(text)  # types, sends by the arrow, checks the text is there
         self.device.back()  # close the keyboard
         return ok
 

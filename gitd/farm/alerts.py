@@ -35,7 +35,7 @@ log = logging.getLogger(__name__)
 MAX_CONTENT = 1900
 
 ENV_VAR = "FARM_DISCORD_WEBHOOK_URL"
-KEYCHAIN_SERVICE = "ofmai-discord-webhook"
+KEYCHAIN_SERVICE = "ofmai-farm-discord-webhook"
 USERNAME = "OFMAI — ferme"
 HTTP_TIMEOUT_S = 5.0
 
@@ -82,8 +82,8 @@ def webhook_url() -> str:
 
     Environment first (so an operator can export one for a single run), then the
     settings object (which is also where a `.env` entry lands), then the keychain
-    — the same order, and the same keychain entry, as `.claude/loop/notify.mjs`
-    on the OFMAI side.
+    — its own keychain entry: falling back on the shared OFMAI one flooded the
+    loop's report channel with "AWAITING HUMAN" messages (sept 2026).
     """
     env = (os.environ.get(ENV_VAR) or "").strip()
     if env:

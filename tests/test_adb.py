@@ -104,3 +104,116 @@ def test_adb_real_bad_serial_raises():
     """
     with pytest.raises(ADBError):
         Device("no-such-device-serial-xyz").adb("shell", "echo", "hi", timeout=5)
+
+
+# ── dump_xml never serves a stale tree ───────────────────────────────────────
+#
+# `uiautomator dump` exits 0 and writes nothing when the screen never settles
+# (a playing video, autoplaying thumbnails — verified on TikTok 2026-09-18). It
+# prints "ERROR: could not get idle state." to stderr, and the *previous*
+# /sdcard/tt.xml is still on the device. Serving that file would hand every
+# adapter the last screen as if it were the current one.
+
+
+def test_dump_xml_returns_no_tree_when_uiautomator_cannot_get_idle_state(monkeypatch):
+    calls = []
+
+    def fake_run(argv, *a, **k):
+        calls.append(list(argv))
+        if any("uiautomator" in a for a in argv):
+            return _FakeCompleted(0, "", "ERROR: could not get idle state.\n")
+        if any(a == "cat" for a in argv):
+            return _FakeCompleted(0, '<hierarchy><node text="STALE"/></hierarchy>', "")
+        return _FakeCompleted(0, "", "")
+
+    monkeypatch.setattr(subprocess, "run", fake_run)
+    dev = Device("serial")
+    monkeypatch.setattr(dev, "dump_portal_json", lambda: None)
+    assert dev.dump_xml() == ""
+    # the old file is removed before dumping, so it can never be served again
+    assert any(any("rm -f /sdcard/tt.xml" in a for a in argv) for argv in calls)  # the stale file is dropped first
+
+
+def test_dump_xml_serves_a_fresh_tree(monkeypatch):
+    def fake_run(argv, *a, **k):
+        if any(a == "cat" for a in argv):
+            return _FakeCompleted(0, '<hierarchy><node text="LIVE"/></hierarchy>', "")
+        return _FakeCompleted(0, "", "")
+
+    monkeypatch.setattr(subprocess, "run", fake_run)
+    dev = Device("serial")
+    monkeypatch.setattr(dev, "dump_portal_json", lambda: None)
+    assert "LIVE" in dev.dump_xml()
+
+
+def test_dump_xml_returns_no_tree_when_the_file_is_missing(monkeypatch):
+    """`cat` of a missing file prints a shell error, never XML."""
+
+    def fake_run(argv, *a, **k):
+        if any(a == "cat" for a in argv):
+            return _FakeCompleted(0, "cat: /sdcard/tt.xml: No such file or directory", "")
+        return _FakeCompleted(0, "", "")
+
+    monkeypatch.setattr(subprocess, "run", fake_run)
+    dev = Device("serial")
+    monkeypatch.setattr(dev, "dump_portal_json", lambda: None)
+    assert dev.dump_xml() == ""
+
+
+# ── an expired cloud-phone login is repaired and the command replayed ─────────
+
+
+def _expiring_adb(monkeypatch, *, hang_first: bool):
+    """A fake adb whose first call is an expired session (a hang, or the
+    "run glogin" answer), healthy once `repaired` is set."""
+    from types import SimpleNamespace
+
+    state = {"repaired": False, "calls": []}
+
+    def fake_run(argv, *a, **k):
+        state["calls"].append(argv)
+        if not state["repaired"]:
+            if hang_first:
+                raise subprocess.TimeoutExpired(argv, k.get("timeout", 1))
+            return SimpleNamespace(returncode=0, stdout="error: you should run glogin to login first\n", stderr="")
+        return SimpleNamespace(returncode=0, stdout="ok\n", stderr="")
+
+    monkeypatch.setattr(subprocess, "run", fake_run)
+    return state
+
+
+@pytest.mark.parametrize("hang_first", [True, False])
+def test_an_expired_geelark_login_is_repaired_and_the_command_replayed(monkeypatch, hang_first):
+    from gitd.bots.common.adb import Device
+
+    state = _expiring_adb(monkeypatch, hang_first=hang_first)
+    repaired_serials = []
+
+    def repair(serial):
+        repaired_serials.append(serial)
+        state["repaired"] = True
+        return True
+
+    monkeypatch.setattr(Device, "session_repair", staticmethod(repair))
+    assert Device("1.2.3.4:20056").adb("shell", "echo", "ok") == "ok"
+    assert repaired_serials == ["1.2.3.4:20056"]
+    assert len(state["calls"]) == 2  # the failed call, then its replay
+
+
+def test_without_a_repair_hook_a_hang_is_still_a_hard_failure(monkeypatch):
+    from gitd.bots.common.adb import ADBError, Device
+
+    _expiring_adb(monkeypatch, hang_first=True)
+    monkeypatch.setattr(Device, "session_repair", None)
+    with pytest.raises(ADBError, match="timed out"):
+        Device("1.2.3.4:20056").adb("shell", "echo", "ok")
+
+
+def test_a_failed_repair_does_not_loop(monkeypatch):
+    from gitd.bots.common.adb import ADBError, Device
+
+    state = _expiring_adb(monkeypatch, hang_first=True)
+    monkeypatch.setattr(Device, "session_repair", staticmethod(lambda serial: False))
+    with pytest.raises(ADBError, match="timed out"):
+        Device("1.2.3.4:20056").adb("shell", "echo", "ok")
+    assert len(state["calls"]) == 1

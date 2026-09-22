@@ -218,6 +218,10 @@ def main():
         print(f'Soft skill "{args.skill}" smoke check: {"ok" if ok else "fail"}' + (f" ({err})" if err else ""))
         sys.exit(0 if ok else 1)
 
+    # a GeeLark farm: the ADB login expires every ~10 min, Device repairs it
+    from gitd.farm import geelark
+
+    geelark.install_repair()
     dev = get_device(args.device)
 
     # Build engine config from CLI flags

@@ -1,66 +1,92 @@
 # TikTok UI elements — fallback chain: content_desc -> text -> resource_id -> coords
 #
-# STATUS: resource ids copied from ghost's public tiktok skill (verified on
-# TikTok v44.3.3, ASUS ROG Phone II 1080x2400 and Galaxy A15); the rest comes
-# from en-US accessibility labels and is NOT yet verified. Run Skill Miner on
-# the first phone, fix here, fill `tested_on` in skill.yaml.
+# STATUS: VERIFIED on a device — GeeLark `explorer-us` (Android 13, 720x1440),
+# TikTok 46.8.2, 2026-09-18, account @jordan.reed90. Source of truth:
+# docs/social/screens-tiktok-actions.md.
 #
-# Feed buttons carry counts in their label ("Like 12.3K"): actions/core.py
-# matches by *contains*, these entries are the exact-match fast path.
+# TikTok OBFUSCATES its resource ids (`a3d`, `uxt`, `g5l`…): they change from
+# build to build and are useless as selectors. Its content-descs, on the other
+# hand, are rich and carry the COUNTS — "Like video. 75.7K likes", "Read or add
+# comments. 344 comments", "Follow jordan" — so everything below selects by
+# description, and actions/core.py matches by *contains* (the count changes).
+# A gesture is proven by a counter that moves (like, favourite, comment) or,
+# for a follow, by the account's own "Following" count: the disappearance of a
+# node proves NOTHING (a false positive was measured, §4 of the survey).
+#
+# `uiautomator dump` cannot read a screen while a video plays ("could not get
+# idle state"): the feed and the search results are read after a pause tap,
+# the sheets and the profile are read normally. The two coordinates below are
+# for the 720x1440 screen and scaled by the adapter.
 
-# -- Bottom navigation ---------------------------------------------------------
+# -- Bottom navigation (text labels; verified 72 / 216 / 360 / 504 / 648 x 1322)
 home_tab:
-  content_desc: "Home"
   text: "Home"
 friends_tab:
   text: "Friends"
 create_tab:
   content_desc: "Create"
-  resource_id: "com.zhiliaoapp.musically:id/m76"
+  text: "Create"
 inbox_tab:
   text: "Inbox"
 profile_tab:
   text: "Profile"
-  resource_id: "com.zhiliaoapp.musically:id/n19"
 
-# -- For You feed --------------------------------------------------------------
+# -- For You feed: the action rail of the visible video (x≈670) --------------------
+# "Like video. 75.7K likes" — the count is in the label
 like_button:
-  content_desc: "Like"
+  content_desc: "Like video"
+# "Read or add comments. 344 comments"
 comment_button:
-  content_desc: "Comment"
-share_button:
-  content_desc: "Share"
+  content_desc: "Read or add comments"
+# "Add or remove this video from Favorites." — the count sits in the label too
 favorite_button:
-  content_desc: "Favorites"
-author_avatar:
-  content_desc: "Profile photo"
+  content_desc: "Add or remove this video from Favorites"
+share_button:
+  content_desc: "Share video"
+# "Follow <handle>" — the small button UNDER the avatar: 35 px apart, so the
+# adapter taps its lower edge, never its centre
 follow_on_feed:
-  content_desc: "Follow"
+  content_desc: "Follow "
+# "<handle>'s profile" — the avatar above the follow button
+author_avatar:
+  content_desc: " profile"
 
-# -- Comments sheet --------------------------------------------------------------
+# -- Comments sheet (static: readable by the tree) ---------------------------------------
 comment_input:
   text: "Add comment..."
+# the send arrow has no label: (657, 858) with the keyboard open, on 720x1440
 comment_send:
-  content_desc: "Post"
+  x: 657
+  y: 858
+comment_close:
+  x: 683
+  y: 471
+comment_reply_link:
+  text: "Reply"
 
-# -- Profile ----------------------------------------------------------------------
+# -- Profile (own or someone else's) ------------------------------------------------------
+# the three counters are labelled text nodes; the number sits next to the label
+following_label:
+  text: "Following"
+followers_label:
+  text: "Followers"
+likes_label:
+  text: "Likes"
 follow_button:
   text: "Follow"
 following_button:
   text: "Following"
-username_row:
-  resource_id: "com.zhiliaoapp.musically:id/zef"
 back_button:
   content_desc: "Back"
 
-# -- Search -------------------------------------------------------------------------
+# -- Search ----------------------------------------------------------------------------------
+# magnifier -> field -> KEYCODE_ENTER; the results play videos: no dump there
 search_icon:
   content_desc: "Search"
-  resource_id: "com.zhiliaoapp.musically:id/j4d"
 search_box:
-  resource_id: "com.zhiliaoapp.musically:id/gti"
+  text: "Search"
 
-# -- Create / post ------------------------------------------------------------------
+# -- Create / post (verified: Create -> gallery -> Next -> title -> Post -> Post Now)
 upload_button:
   text: "Upload"
 gallery_first_item:
@@ -72,35 +98,31 @@ caption_input:
   resource_id: "com.zhiliaoapp.musically:id/caption_input"
 post_button:
   text: "Post"
+# the "Post video publicly?" confirmation that follows Post
+post_now_button:
+  text: "Post Now"
 aigc_toggle:
   text: "AI-generated content"
 # The "on" state of the toggle above. PostVideoAction re-reads the screen after
 # tapping and refuses to publish unless the state matches params.aigc_label
-# (docs/social/rules.md R3): three of the six characters declare themselves AI
-# and three do not, so a post labelled the wrong way falsifies the whole test.
-# [to verify on the device] TikTok may only expose the state as a `checked`
-# attribute on the switch row rather than as its own labelled node — the action
-# reads both.
+# (docs/social/rules.md R3). TikTok may only expose the state as a `checked`
+# attribute on the switch row rather than as its own labelled node — the
+# action reads both. [not exercised: the explorer's post carried no label]
 aigc_toggle_on:
   content_desc: "AI-generated content, on"
 
-# -- Own video: comments (comment_reply, E3.2) --------------------------------------
-# [to verify on the device] every resource id below. `profile_grid_first_item`
-# is the newest tile of the profile grid (not the upload gallery's
-# `gallery_first_item` above); the two comment rows are what
-# gitd/farm/replies.pair_comments() reads to build (author, text) pairs.
+# -- Own video: comments (comment_reply, E3.2) -------------------------------------------
+# The reply itself was verified (345 -> 346 comments); the ROW ids of the
+# comment list were not mined (obfuscated, R34): the adapter reads the rows by
+# the "Reply" links and the text nodes above them, not by these ids.
 profile_grid_first_item:
   resource_id: "com.zhiliaoapp.musically:id/cover"
 comment_author_row:
   resource_id: "com.zhiliaoapp.musically:id/title"
 comment_text_row:
   resource_id: "com.zhiliaoapp.musically:id/desc"
-comment_reply_link:
-  text: "Reply"
 
-# -- Inbox / direct messages (dm_reply, E3.3) ----------------------------------------
-# [to verify on the device]. Incoming and outgoing bubbles are told apart by
-# geometry (left half of the screen = incoming), not by a resource id.
+# -- Inbox / direct messages (dm_reply, E3.3) — NOT exercised (no incoming message)
 dm_thread_row:
   resource_id: "com.zhiliaoapp.musically:id/title"
 dm_message_row:

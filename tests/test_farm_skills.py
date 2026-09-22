@@ -144,8 +144,15 @@ def test_skill_loads_with_workflows(skill_name, workflows):
     assert set(s.list_workflows()) == workflows
     assert "open_app" in s.list_actions()
     assert s.popup_detectors
-    # R34: no skill runs on a real account until its selectors are verified
-    assert s.metadata.get("tested_on") == []
+    # R34: a skill runs on a real account only once its selectors were verified
+    # on a device. Reddit was (docs/social/screens-reddit-actions.md); X has no
+    # device path at all (the cloud phone is refused), so it stays empty.
+    tested_on = s.metadata.get("tested_on")
+    assert isinstance(tested_on, list)
+    if skill_name == "ofmai_x":
+        assert tested_on == []
+    else:
+        assert tested_on and tested_on[0]["app_version"] and tested_on[0]["date"], skill_name
 
 
 def test_every_platform_with_a_skill_can_be_registered():
@@ -160,6 +167,78 @@ def test_every_platform_with_a_skill_can_be_registered():
 # ── warming ───────────────────────────────────────────────────────────────────
 
 
+class FakeInstagram(ScreenDevice):
+    """The verified home feed (720x1440, Instagram 443): a post whose buttons
+    flip their content-desc when tapped — Like -> Liked, Add to Saved ->
+    Remove from saved — and an author whose profile offers Follow -> Following.
+    A feed swipe brings a fresh post. The adapter records nothing it cannot
+    see flip, so a static screen would end the session as action_blocked."""
+
+    serial = "fake-instagram"
+    LIKE = (30, 900, 90, 960)
+    COMMENT = (110, 900, 170, 960)
+    SAVE = (630, 900, 690, 960)
+    AUTHOR = (80, 200, 300, 240)
+    FOLLOW = (400, 300, 700, 360)
+
+    def __init__(self):
+        super().__init__()
+        self.liked = self.saved = self.followed = False
+        self.view = "feed"
+
+    def adb(self, *args, timeout=30):
+        out = super().adb(*args, timeout=timeout)
+        if args[:3] == ("shell", "wm", "size"):
+            return "Physical size: 720x1440"
+        if args[:3] == ("shell", "input", "swipe") and len(args) >= 7:
+            x1, y1, x2, y2 = (int(a) for a in args[3:7])
+            if abs(y2 - y1) > 30 and self.view == "feed":
+                self.liked = self.saved = False  # a new post
+        return out
+
+    @staticmethod
+    def _in(x, y, box, pad=30):
+        return box[0] - pad <= x <= box[2] + pad and box[1] - pad <= y <= box[3] + pad
+
+    def on_tap(self, x, y):
+        if self.view == "feed":
+            if self._in(x, y, self.LIKE):
+                self.liked = True
+            elif self._in(x, y, self.SAVE):
+                self.saved = True
+            elif self._in(x, y, self.AUTHOR):
+                self.view = "profile"
+        elif self.view == "profile" and self._in(x, y, self.FOLLOW):
+            self.followed = True
+
+    def back(self, delay=1.0):
+        super().back(delay)
+        self.view = "feed"
+
+    def screen(self):
+        rid = "com.instagram.android:id/"
+        if self.view == "profile":
+            label = "Following jordan.reed.97" if self.followed else "Follow jordan.reed.97"
+            return (
+                "<hierarchy>"
+                f'<node resource-id="{rid}profile_header_follow_button" content-desc="{label}" bounds="[400,300][700,360]"/>'
+                f'<node resource-id="{rid}profile_header_familiar_followers_value" text="12" bounds="[300,200][360,240]"/>'
+                "</hierarchy>"
+            )
+        return (
+            "<hierarchy>"
+            f'<node content-desc="Home" resource-id="{rid}feed_tab" bounds="[42,1300][102,1350]"/>'
+            f'<node content-desc="Search and explore" resource-id="{rid}search_tab" bounds="[474,1300][534,1350]"/>'
+            f'<node resource-id="{rid}row_feed_photo_profile_name" text="jordan.reed.97" bounds="[80,200][300,240]"/>'
+            f'<node resource-id="{rid}row_feed_photo_imageview" content-desc="Photo by jordan.reed.97, 12 likes" bounds="[0,250][720,880]"/>'
+            f'<node resource-id="{rid}row_feed_button_like" content-desc="{"Liked" if self.liked else "Like"}" bounds="[30,900][90,960]"/>'
+            f'<node resource-id="{rid}row_feed_button_comment" content-desc="Comment" bounds="[110,900][170,960]"/>'
+            f'<node resource-id="{rid}row_feed_button_share" content-desc="Share" bounds="[190,900][250,960]"/>'
+            f'<node resource-id="{rid}row_feed_button_save" content-desc="{"Remove from saved" if self.saved else "Add to Saved"}" bounds="[630,900][690,960]"/>'
+            "</hierarchy>"
+        )
+
+
 def test_instagram_warm_session_runs_against_fake_device(monkeypatch, db):
     monkeypatch.setenv("FARM_FAST", "1")
     # a network-phase account whose today is not its weekly rest day: on a rest
@@ -171,7 +250,7 @@ def test_instagram_warm_session_runs_against_fake_device(monkeypatch, db):
 
     mod = importlib.import_module("gitd.skills.ofmai_instagram")
     skill = mod.load()
-    dev = FakeDevice()
+    dev = FakeInstagram()
     wf = skill.get_workflow("warm_session", dev, handle=f"@{acc.handle}", minutes=10, seed=5, comments="nice\ncool")
     result = wf.run()
     assert result.success, result.error
@@ -179,6 +258,7 @@ def test_instagram_warm_session_runs_against_fake_device(monkeypatch, db):
     assert step["videos"] > 10
     assert step["phase"] == "network"
     assert step["day_of_life"] == expected_day
+    assert step.get("health") is None  # a feed whose buttons flip never trips the silent guard
     # every gesture went through humanised swipes, never a bare `input tap`
     taps = [c for c in dev.calls if c[:3] == ("shell", "input", "tap")]
     assert taps == []

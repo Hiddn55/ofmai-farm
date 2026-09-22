@@ -3,8 +3,8 @@
 No device, no network, no account: what is checked here is the *step list* and
 the guard around it — the part that decides, before a phone is ever touched,
 whether a creation is allowed to run. Whether the selectors match the real apps
-is Skill Miner's job on the Mac mini (R34), which is why `tested_on` is empty and
-every step still carries "verified": false.
+is Skill Miner's job on the Mac mini (R34): the three walked platforms carry
+their `tested_on` entry, and the screens nobody mined still say "verified": false.
 """
 
 from unittest.mock import MagicMock
@@ -107,12 +107,24 @@ def test_no_tap_falls_back_to_coordinates(platform):
             assert any(step.get(k) for k in ("text", "resource_id", "content_desc", "class_name"))
 
 
+# The platforms whose signup was walked on a device (docs/social/screens-*.md):
+# their skill.yaml carries a `tested_on` entry and every screen that was seen
+# is "verified": true. X has no device path at all (the cloud phone is refused,
+# screens-x.md) and stays empty.
+WALKED = {"instagram", "reddit", "tiktok"}
+
+
 @pytest.mark.parametrize("platform", signup.PLATFORMS)
-def test_not_ready_for_a_real_run_until_skill_miner_has_been_there(platform):
+def test_not_ready_for_a_real_run_while_a_step_is_unverified(platform):
+    """A walked skill still has human-only screens nobody mined (profile editor,
+    settings): they keep the real-run gate shut, which is the point of R34."""
     ready, reasons = signup.ready_for_real_run(platform)
     assert ready is False
-    assert any("tested_on" in r for r in reasons)
-    assert any("unverified" in r for r in reasons)
+    if platform in WALKED:
+        assert not any("tested_on" in r for r in reasons)
+        assert any("unverified" in r for r in reasons)
+    else:
+        assert any("tested_on" in r for r in reasons)
 
 
 @pytest.mark.parametrize("platform", signup.PLATFORMS)
@@ -121,7 +133,11 @@ def test_skill_yaml_declares_its_guard_and_its_app(platform):
     assert meta["kind"] == "hard"  # the checkpoint step only exists in a recorded skill
     assert meta["health_platform"] == platform
     assert meta["app_package"] == signup.APP_PACKAGE[platform]
-    assert meta["tested_on"] == []
+    if platform in WALKED:
+        entry = meta["tested_on"][0]
+        assert entry["app_version"] and entry["date"] and entry["verified"]
+    else:
+        assert meta["tested_on"] == []
 
 
 # ── The validator catches what a careless edit would introduce ────────────────
@@ -426,6 +442,9 @@ class ReplayDevice:
 FRIENDLY_SCREEN = (
     "<hierarchy>"
     "<node text='Create a password'/><node text='I agree'/>"
+    "<node text='Create your username'/><node text='Set a password'/>"
+    "<node text='What is your birthday'/><node text='What is your name'/>"
+    "<node text='Home'/>"
     "<node text='sierra.cole'/>"
     "</hierarchy>"
 )
@@ -434,22 +453,32 @@ FRIENDLY_SCREEN = (
 @pytest.mark.parametrize("platform", signup.PLATFORMS)
 def test_the_whole_list_replays_without_a_phone(platform):
     dev = ReplayDevice(FRIENDLY_SCREEN)
+    steps = signup.load_steps(platform)
     workflow = signup.GuardedRecordedWorkflow(
         dev,
-        signup.load_steps(platform),
-        params={**GOOD_PARAMS, "bio": "sierra, 25, la", "niche": "gymgirl, fitness, losangeles"},
+        steps,
+        params={
+            **GOOD_PARAMS,
+            "bio": "sierra, 25, la",
+            "niche": "gymgirl, fitness, losangeles",
+            "birthday_us": "06141997",  # Reddit types the date as eight digits
+            "phone": "2062959463",  # TikTok signs up by the character's own line
+        },
         platform=platform,
     )
     workflow.app_package = signup.APP_PACKAGE[platform]
     result = workflow.run()
     assert result.success, result.error
-    assert result.data["completed_steps"] == len(signup.load_steps(platform))
+    assert result.data["completed_steps"] == len(steps)
     # the parameters really were substituted, not typed as placeholders
-    assert GOOD_PARAMS["email"] in dev.typed
     assert not any("{" in t for t in dev.typed)
+    # the email is typed wherever the list types it — TikTok signs up by phone
+    # and only mentions the mailbox in a gate (account-creation.md §4 ter)
+    types_email = any(s.get("text") == "{email}" for s in steps)
+    assert (GOOD_PARAMS["email"] in dev.typed) is types_email
     # the handle is typed wherever the list types it — on Reddit it is not, because
     # the field arrives pre-filled and clearing it is a human gesture (§6.4)
-    types_handle = any(s.get("text") == "{handle}" for s in signup.load_steps(platform))
+    types_handle = any(s.get("text") == "{handle}" for s in steps)
     assert (GOOD_PARAMS["handle"] in dev.typed) is types_handle
 
 

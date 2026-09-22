@@ -481,15 +481,25 @@ def test_instagram_adapter_never_unlikes_a_comment_it_already_liked():
 
 
 def test_reddit_never_votes_back():
-    """A vote cast in return for one received is vote manipulation (§9)."""
-    xml = _ig_comments_xml(
-        [("u_one", "nice work")],
-        rid_author="com.reddit.frontpage:id/author",
-        rid_text="com.reddit.frontpage:id/comment_body",
+    """A vote cast in return for one received is vote manipulation (§9).
+
+    The Reddit comment list is read from what the device really exposes: the
+    author only lives in the content-desc of `comment_header` ("Level 1 comment
+    by <author>, ..."), the body is the text node right under it.
+    """
+    xml = (
+        "<hierarchy>"
+        '<node resource-id="comment_layout" bounds="[0,600][720,760]"/>'
+        '<node resource-id="comment_header"'
+        ' content-desc="Level 1 comment by u_one, 3 hours ago, 2 votes" bounds="[60,600][700,640]"/>'
+        '<node text="nice work" bounds="[60,640][700,680]"/>'
+        '<node resource-id="fbp_comment_footer" text="2 votes" bounds="[60,690][720,750]"/>'
+        "</hierarchy>"
     )
     dev, ad = _adapter("ofmai_reddit", "gitd.skills.ofmai_reddit.actions.replies.RedditCommentAdapter", xml)
     assert ad.likes_back is False
     comment = ad.read_comments(xml)[0]
+    assert (comment.author, comment.text) == ("u_one", "nice work")
     assert ad.like_comment(comment, xml) is False
     assert dev.taps() == []
 

@@ -156,3 +156,38 @@ def test_xml_helpers_contains_matching():
     assert nodes_where(xml, text="follow")
     assert len(nodes_where(xml, desc="story")) == 1
     assert nodes_where(xml, desc="nope") == []
+
+
+# ── a gesture that proves nothing on screen is never recorded ─────────────────
+
+
+def test_three_silent_gestures_end_the_session_as_action_blocked():
+    """A like that never turns into "Liked" is what a soft block looks like from
+    the device, long before any banner says so. An adapter that verifies its
+    gestures raises ``last_gesture_silent``; three in a row stop the session,
+    leave an ``action_blocked`` signal in the ledger, and nothing silent was
+    ever recorded as done."""
+
+    class Silent(FakeAdapter):
+        last_gesture_silent = False
+
+        def like(self, xml):
+            self.events.append("like")
+            self.last_gesture_silent = True
+            return False
+
+    stats, ledger, adapter = _run(25, adapter=Silent(), minutes=60)
+    assert stats.health == "action_blocked"
+    assert ledger.signals == [("action_blocked", "3 gestures without a state change on screen")]
+    assert stats.silent == 3
+    assert stats.likes == 0
+    assert adapter.events.count("like") == 3
+
+
+def test_an_adapter_that_does_not_verify_is_never_counted_silent():
+    """The flag is opt-in: the fake adapter never raises it, so a False from
+    ``like`` is just "did not like", not a silence."""
+    stats, ledger, _ = _run(25, minutes=60)
+    assert stats.silent == 0
+    assert stats.health is None
+    assert ledger.signals == []

@@ -150,24 +150,50 @@ _DISMISS_WORDS = {"not now", "skip", "cancel", "dismiss", "later", "discard"}
 _DISMISS_EXACT = {"cancel", "dismiss", "discard", "save draft", "don\u2019t allow", "don't allow"}
 
 
+# What a GeeLark phone answers once its ADB login has expired (stdout, exit 0)
+SESSION_EXPIRED = "run glogin"
+
+
 class Device:
     """Encapsulates ADB + XML primitives for one connected Android device."""
+
+    # A cloud phone whose ADB login expires (GeeLark: ~10 min) gets a repair
+    # hook — `serial -> bool` — installed by gitd.farm.geelark.install_repair().
+    # On a hang or on the "run glogin" answer, _run repairs the session once
+    # and replays the command. None on a farm of real phones.
+    session_repair = None
 
     def __init__(self, serial: str):
         self.serial = serial
 
     # ── ADB primitives ────────────────────────────────────────────────────────
 
+    def _run_once(self, args, timeout) -> subprocess.CompletedProcess:
+        return subprocess.run(
+            ["adb", "-s", self.serial, *args],
+            capture_output=True,
+            text=True,
+            timeout=timeout,
+        )
+
     def _run(self, args, timeout) -> subprocess.CompletedProcess:
         """Invoke adb once. Raises ADBError if adb is missing or the call times
-        out — both are hard failures no caller can recover from as a string."""
+        out — both are hard failures no caller can recover from as a string.
+
+        With a ``session_repair`` hook, an expired cloud-phone login (a hang,
+        or the "run glogin" answer) is repaired and the call replayed once.
+        """
+        repair = type(self).session_repair
         try:
-            return subprocess.run(
-                ["adb", "-s", self.serial, *args],
-                capture_output=True,
-                text=True,
-                timeout=timeout,
-            )
+            try:
+                r = self._run_once(args, timeout)
+            except subprocess.TimeoutExpired:
+                if not repair or not repair(self.serial):
+                    raise
+                r = self._run_once(args, timeout)
+            if repair and SESSION_EXPIRED in (r.stdout or "") and repair(self.serial):
+                r = self._run_once(args, timeout)
+            return r
         except FileNotFoundError as e:
             raise ADBError(args, 127, "adb executable not found on PATH") from e
         except subprocess.TimeoutExpired as e:
@@ -453,14 +479,41 @@ class Device:
             nodes = tree if isinstance(tree, list) else [tree]
             inner = "".join(self._portal_node_to_xml(n) for n in nodes)
             return f'<?xml version="1.0" encoding="UTF-8"?><hierarchy rotation="0">{inner}</hierarchy>'
-        # Fallback: classic uiautomator dump
-        self.adb("shell", "uiautomator", "dump", "/sdcard/tt.xml")
+        # Fallback: classic uiautomator dump.
+        #
+        # `uiautomator dump` exits 0 even when it fails: on a screen that never
+        # settles (a playing video, autoplaying thumbnails) it prints
+        # "ERROR: could not get idle state." to stderr and writes NOTHING — and
+        # the previous /sdcard/tt.xml is still there. Reading it would hand every
+        # caller the *previous* screen as if it were the current one, and an
+        # adapter would then tap, type and verify against a tree that no longer
+        # exists. Verified on TikTok (feed and search results) on 2026-09-18.
+        # So: remove the old file first, and answer "" — no tree — when the
+        # dump did not produce one. Callers already treat "" as "nothing found".
+        # one round-trip: drop the previous tree, then dump — a dump that fails
+        # ("could not get idle state") must never serve the stale file.
+        # A uiautomator left behind by an interrupted run keeps the
+        # accessibility service and makes every later dump hang (seen on a
+        # GeeLark phone, 2026-09-19): on a timeout, kill it and try once more.
+        dump_cmd = "rm -f /sdcard/tt.xml; uiautomator dump /sdcard/tt.xml"
+        try:
+            dumped = self.adb_soft("shell", dump_cmd, timeout=25)
+        except ADBError:
+            self.adb_soft("shell", "pkill", "-f", "uiautomator", timeout=10)
+            try:
+                dumped = self.adb_soft("shell", dump_cmd, timeout=25)
+            except ADBError:
+                return ""
+        if "could not get idle state" in (dumped.stderr or "") + (dumped.stdout or ""):
+            return ""
         r = subprocess.run(
             ["adb", "-s", self.serial, "exec-out", "cat", "/sdcard/tt.xml"],
             capture_output=True,
             text=True,
         )
-        return r.stdout
+        out = r.stdout or ""
+        # a missing file comes back as a shell error line, never as XML
+        return out if "<hierarchy" in out or "<node" in out else ""
 
     # ── XML parsing ───────────────────────────────────────────────────────────
 

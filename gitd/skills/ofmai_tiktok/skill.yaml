@@ -1,7 +1,7 @@
 name: ofmai_tiktok
 display_name: OFMAI TikTok
 description: TikTok warming, posting and replies for OFMAI characters — humanised, budgeted by the farm ledger
-version: "0.1.0"
+version: "0.2.0"
 app_package: com.zhiliaoapp.musically
 author: OFMAI
 license: MIT
@@ -47,7 +47,16 @@ exports:
         replies_thanks: { type: string, required: false, description: "newline-separated ASCII replies" }
         replies_question: { type: string, required: false, description: "newline-separated ASCII replies" }
 
+# `button` is matched on text or content-desc, exactly. "Swipe up for more" is
+# the feed tutorial: it is cleared by a swipe in the adapter (open_feed) — the
+# `back` fallback below only matters for the plain open_app action.
 popup_detectors:
+  - detect: "Post video publicly?"
+    button: "Post Now"
+    label: "Publish confirmation (verified) — the post workflow expects it"
+  - detect: "Add TikTok widget"
+    button: "CANCEL"
+    label: "Home-screen widget prompt"
   - detect: "Continue editing"
     button: "Save draft"
     label: "Draft resume overlay"
@@ -101,4 +110,16 @@ default_params:
 # Health signals ("You're tapping too fast", "Verify to continue", ...) are
 # matched by gitd/farm/health.py and end the session; never dismissed here.
 
-tested_on: []
+# R34: the descs of elements.yaml and the gestures of actions/ were exercised
+# on this device, on the explorer account (never a character). Source:
+# docs/social/screens-tiktok-actions.md. The follow was NOT proven there (the
+# node vanished, the profile said Following 0 — a mechanical miss on a 35 px
+# target is the leading explanation): the adapter now taps the lower edge and
+# proves a follow by the own Following count; to be replayed on the explorer.
+tested_on:
+  - device: "GeeLark explorer-us (Samsung Galaxy S20 emulated, Android 13, 720x1440)"
+    app_version: "46.8.2"
+    date: "2026-09-18"
+    verified: [view, like, save, comment, comment_reply, post_video, search, profile_visit]
+    unverified: [follow, dm_reply, aigc_toggle]
+    notes: "like 75.7K->75.8K, favourite 3855->3856, comment 344->345, reply 345->346; uiautomator cannot dump a playing video"

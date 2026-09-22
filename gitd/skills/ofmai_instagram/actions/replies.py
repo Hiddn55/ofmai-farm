@@ -3,13 +3,17 @@
 Kept apart from :mod:`~gitd.skills.ofmai_instagram.actions.core` so the warming
 adapter stays exactly what the warming loop needs. Both classes extend
 :class:`InstagramAdapter`, so they inherit ``dump``, ``_tap_el``, ``_tap_text``,
-``_tap_desc`` and the popup handling.
+``_tap_desc`` and the interstitial handling.
 
-Every selector used here comes from the en-US accessibility labels and **none
-has been seen on a device** (R34). The unknown resource ids live in
-``elements.yaml`` — ``profile_grid_first_item``, ``comment_author_row``,
-``comment_text_row``, ``dm_thread_row``, ``dm_message_row``, ``dm_input``,
-``dm_send`` — precisely so Skill Miner fixes them in one file.
+Verified on GeeLark ``explorer-us`` (Instagram 443.0.0.48.82, 2026-09-16,
+docs/social/screens-instagram-actions.md §1 ``comment_reply``): a tap on
+``Reply`` under a comment shows a "Replying to <handle>" banner and
+**pre-fills the composer with "@<handle> "** — the reply is typed right after
+it, through ``layout_comment_thread_edittext_multiline`` and
+``layout_comment_thread_post_button_icon``, and the thread then shows
+"<handle> said @<handle> <text>". The DM adapter was NOT exercised: a
+brand-new account has no incoming message; its ids stay as recorded in
+``elements.yaml`` until a real thread exists.
 """
 
 from __future__ import annotations
@@ -52,7 +56,7 @@ class InstagramCommentAdapter(CommentRowsMixin, InstagramAdapter):
         post = self.dump()
         key = post_key(self._post_label(post))
         # open the comment sheet; without it there is nothing to answer
-        if not (self._tap_desc(post, "Comment") or self._tap_el("comment_button", post)):
+        if not (self._tap_el("comment_button", post) or self._tap_desc(post, "Comment")):
             return None
         self.human.pause(2.0)
         return key
@@ -82,9 +86,9 @@ class InstagramCommentAdapter(CommentRowsMixin, InstagramAdapter):
     def reply_to_comment(self, comment: Comment, text: str, xml: str) -> bool:
         if not tap_in_row(self.human, xml, comment.y, text="Reply"):
             return False
-        self.human.pause(1.2)  # Instagram pre-fills "@author "
+        self.human.pause(1.2)  # Instagram pre-fills "@author " and focuses the composer
         sheet = self.dump()
-        if not (self._tap_el("comment_input", sheet) or self._tap_text(sheet, "Add a comment")):
+        if not self._tap_comment_input(sheet):
             return False
         self.human.pause(0.6)
         self.human.type_text(text)

@@ -3,88 +3,97 @@
     "action": "launch",
     "package": "com.reddit.frontpage",
     "description": "Launch Reddit on the character's phone",
-    "goal": "Day 7 of the phone, the last of the four accounts",
-    "verified": false
+    "goal": "Day 7 of the phone, the last of the four accounts. Thirteen screens, all seen on GeeLark explorer-us (Reddit 2026.35.0, 2026-09-16, docs/social/screens-reddit.md)",
+    "verified": true
   },
-  { "action": "wait", "seconds": 8, "description": "Cold start", "verified": false },
-  { "action": "tap", "text": "Sign up", "description": "Start a signup [to verify]", "verified": false },
-  { "action": "tap", "text": "Email", "description": "Focus the email field [to verify]", "verified": false },
-  { "action": "type", "text": "{email}", "description": "The character's own Gmail, created at J0", "verified": false },
-  { "action": "tap", "text": "Continue", "description": "Submit the email [to verify]", "verified": false },
+  { "action": "wait", "seconds": 8, "description": "Cold start", "verified": true },
+  { "action": "tap", "text": "Get Started", "description": "Screen 1 — 'The most real place on the internet'", "verified": true },
+  {
+    "action": "tap",
+    "text": "Continue with email",
+    "description": "Screen 2 — the Get Started sheet. Google and phone number sit above it: never those",
+    "verified": true
+  },
+  {
+    "action": "tap",
+    "class_name": "android.widget.EditText",
+    "description": "Screen 3 — 'Hi new friend, welcome to Reddit': the only field is the email",
+    "verified": true
+  },
+  { "action": "type", "text": "{email}", "description": "The character's own mailbox (account-creation.md §4 bis: firstname.lastname + birth year)", "verified": true },
+  { "action": "tap", "text": "Continue", "description": "Submit the email", "verified": true },
+  {
+    "action": "checkpoint",
+    "reason": "email",
+    "prompt": "Screen 4 — 'Verify your email'. Reddit sent a 6-digit CODE (not a link) to {email}. Read it in the character's mailbox — the mailbox password lives in the Keychain, it is never a parameter of this run (R9) — type it in the single code field with POST /api/phone/type and tap Continue ('Resend' appears after 30 s). Then resume.",
+    "success": { "screen_has": "Create your username" },
+    "timeout_s": 0,
+    "description": "Email verification by code (account-creation.md §4.3)",
+    "verified": true
+  },
   {
     "action": "checkpoint",
     "reason": "generic",
-    "prompt": "Reddit pre-fills a random username. Clear it completely and type {handle} from the persona sheet; if it is taken, use fallback handle 2, then 3, and update the sheet. A field with a pre-filled value cannot be cleared reliably by a recorded step, which is why this one is yours. Then resume.",
+    "prompt": "Screen 5 — 'Create your username'. The field arrives PRE-FILLED with a random username (not derived from the email, unlike Instagram): the (x) at the right end of the field clears it. Clear it, type {handle} from the persona sheet; if it is taken, use fallback handle 2, then 3, and update the sheet. Tap Continue. Then resume.",
+    "success": { "screen_has": "Set a password" },
     "timeout_s": 0,
     "description": "Username — the field arrives pre-filled",
-    "verified": false
+    "verified": true
   },
   {
     "action": "checkpoint",
     "reason": "login",
-    "prompt": "Type the Reddit password for {handle} on the device. Read it from the Keychain (ofmai-social-reddit-<slug>) and type it with POST /api/phone/type; it is never a parameter of this run (R9). Then resume.",
+    "prompt": "Screen 6 — 'Set a password'. Type the Reddit password for {handle} on the device: read it from the Keychain (ofmai-social-reddit-<slug>) and type it with POST /api/phone/type; it is never a parameter of this run (R9). Tap Continue. A 'Can't create passkey' dialog (expected on a cloud phone: no Google account, no screen lock) and the Android notifications permission follow — both are dismissed for you (OK, then Allow: get_notifications reads the codes there). Then resume.",
     "timeout_s": 0,
-    "description": "Password — typed by a human",
-    "verified": false
+    "description": "Password — typed by a human; passkey dialog and notification permission handled by the popup detectors",
+    "verified": true
   },
   {
-    "action": "checkpoint",
-    "reason": "captcha",
-    "prompt": "Solve the captcha by hand — never by an agent, never by a solving service (R25). Three failures in a row end the day. Then resume.",
-    "timeout_s": 0,
-    "description": "Captcha",
-    "verified": false
+    "action": "tap",
+    "content_desc": "Select date",
+    "description": "Screen 9 — 'About you', birthday. The pencil toggles the calendar into a MM/DD/YYYY keyboard field, far more reliable than the calendar. Optional on Reddit's side ('Skip'), but the birthday conditions access to the adult communities",
+    "verified": true
   },
   {
-    "action": "checkpoint",
-    "reason": "generic",
-    "prompt": "Onboarding: skip the gender question, then pick 3 to 5 topics from {niche}. That is consumption, not a follow — do not join anything else and do not follow anyone (R16). Then resume.",
-    "timeout_s": 0,
-    "description": "Onboarding topics",
-    "verified": false
+    "action": "tap",
+    "class_name": "android.widget.EditText",
+    "description": "The MM/DD/YYYY field",
+    "verified": true
   },
-  {
-    "action": "checkpoint",
-    "reason": "email",
-    "prompt": "Reddit sends a verification LINK, not a code. Open the 'Verify your email' notification for {email}, tap the link, then come back to Reddit through the recents — do not open Gmail, it would force-stop the app. Then resume.",
-    "timeout_s": 0,
-    "description": "Email verification by link (account-creation.md §4.3)",
-    "verified": false
-  },
-  {
-    "action": "checkpoint",
-    "reason": "generic",
-    "prompt": "Adult-content settings. Settings > Account settings > 'Show mature content (I am over 18)' ON. Then Profile > Edit > 'NSFW: this profile contains adult content' ON and 'Allow people to follow you' ON. [labels to verify] Without them the posts of this account are invisible to anyone who has not opted in. Then resume.",
-    "timeout_s": 0,
-    "description": "The two adult-content settings (account-creation.md §6.4)",
-    "verified": false
-  },
-  { "action": "tap", "text": "Edit", "description": "Open the profile editor [to verify]", "verified": false },
-  {
-    "action": "checkpoint",
-    "reason": "generic",
-    "prompt": "Avatar: use the MOST RECENT gallery item — the watermarked variant pushed with adb push minutes ago — not a Reddit snoo. Confirm, come back to the editor, then resume.",
-    "timeout_s": 0,
-    "description": "Avatar",
-    "verified": false
-  },
-  { "action": "tap", "text": "Display name", "description": "Focus the display-name field [to verify]", "verified": false },
-  { "action": "type", "text": "{name}", "description": "Display name from the persona sheet", "verified": false },
-  { "action": "tap", "text": "About you", "description": "Focus the bio field [to verify]", "verified": false },
   {
     "action": "type",
-    "text": "{bio}",
-    "description": "Reddit bio of the persona sheet — ASCII, '18+' whether the character is declared or not (R2). No profile link and no social link until the go/no-go at 31 days and 100 karma; zero link in a post at any age (R22)",
-    "verified": false
+    "text": "{birthday_us}",
+    "description": "Eight digits, no separator (06141997 for June 14, 1997) — the persona sheet's birthday, 18+ (R2)",
+    "verified": true
   },
-  { "action": "tap", "text": "Save", "description": "Save the profile [to verify]", "verified": false },
+  { "action": "tap", "text": "OK", "description": "Close the date picker", "verified": true },
+  { "action": "tap", "text": "Continue", "description": "Submit the birthday", "verified": true },
+  { "action": "tap", "text": "Yes, Confirm", "description": "Screen 10 — the 'Confirm your birthday?' sheet", "verified": true },
   {
     "action": "checkpoint",
     "reason": "generic",
-    "prompt": "Last look: the profile shows {handle}, the bio and the avatar, both adult-content settings are on, and there is no link anywhere. Register it on the Mac mini the same day — accounts add reddit @{handle} --device <serial> --tz <persona tz> --created-on <today> — then resume to close the run. The `script` app of this character (reddit.com/prefs/apps) is a separate human step at day 15 or later, never today.",
+    "prompt": "Screens 11-13 — 'About you' (gender), 'Choose your interests' (12 tiles, 3x4) and 'Customize your feed'. Pick the persona sheet's gender, then 3 to 5 tiles from {niche}, then Continue on each screen. That is consumption, not a follow — do not join anything and do not follow anyone (R16). Continue lands on the Home feed. Then resume.",
+    "success": { "screen_has": "Home" },
+    "timeout_s": 0,
+    "description": "Onboarding: gender, interests, feed",
+    "verified": true
+  },
+  {
+    "action": "checkpoint",
+    "reason": "generic",
+    "prompt": "Settings and profile, by hand on the live screen (labels not yet mined, R34): Settings > Account settings > 'Show mature content (I am over 18)' ON; Profile > Edit > 'NSFW: this profile contains adult content' ON, 'Allow people to follow you' ON; display name {name}; bio {bio} (ASCII, '18+' whether the character is declared or not — R2; no link anywhere before the go/no-go at 31 days and 100 karma — R22); avatar = the MOST RECENT gallery item, the watermarked variant pushed with adb push minutes ago, never a snoo. Save. Then resume.",
+    "timeout_s": 0,
+    "description": "The two adult-content settings and the profile (account-creation.md §6.4)",
+    "verified": false
+  },
+  { "action": "tap", "text": "You", "description": "The profile tab of the bottom bar", "verified": true },
+  {
+    "action": "checkpoint",
+    "reason": "generic",
+    "prompt": "Last look on the You tab: the profile shows u/{handle}, the bio and the avatar, both adult-content settings are on, and there is no link anywhere. Register it on the Mac mini the same day — accounts add reddit @{handle} --device <GeeLark profile> --tz <persona tz> --created-on <today> — then resume to close the run. The `script` app of this character (reddit.com/prefs/apps) is a separate human step at day 15 or later, never today.",
     "success": { "screen_has": "{handle}" },
     "timeout_s": 0,
-    "description": "The run ends on the profile screen showing {handle}",
-    "verified": false
+    "description": "The run ends on the You tab showing {handle}",
+    "verified": true
   }
 ]

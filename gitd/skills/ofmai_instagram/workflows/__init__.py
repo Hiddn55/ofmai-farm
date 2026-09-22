@@ -3,6 +3,8 @@ comment_reply, dm_reply."""
 
 from __future__ import annotations
 
+import re
+
 from gitd.farm import ledger, policy
 from gitd.farm.human import HumanInput, SessionProfile
 from gitd.farm.replykit import CommentReplyAction, DmReplyAction
@@ -11,6 +13,23 @@ from gitd.farm.warm import nodes_where
 from gitd.skills.base import Action, ActionResult, EngineConfig, Workflow
 from gitd.skills.ofmai_instagram.actions.core import PKG, InstagramAdapter
 from gitd.skills.ofmai_instagram.actions.replies import InstagramCommentAdapter, InstagramDmAdapter
+
+
+def _tap_caption_field(adapter, human, xml: str) -> bool:
+    """Tap the LEFT part of the caption field: its centre opens the preview (verified)."""
+    el = adapter.elements.get("caption_input")
+    pos = el.find(adapter.device, xml) if el else None
+    if pos is None:
+        return adapter._tap_text(xml, "Write a caption")
+    rid = el.resource_id or ""
+    for n in nodes_where(xml, rid=rid) if rid else []:
+        m = re.search(r'bounds="\[(\d+),(\d+)\]\[(\d+),(\d+)\]"', n)
+        if m:
+            x1, y1, x2, y2 = map(int, m.groups())
+            human.tap(x1 + max(24, (x2 - x1) // 6), (y1 + y2) // 2)
+            return True
+    human.tap(*pos)
+    return True
 
 
 class InstagramWarmAction(WarmSessionAction):
@@ -34,7 +53,11 @@ class WarmSession(Workflow):
 
 
 class PostReelAction(Action):
-    """Publish the most recent gallery video as a Reel. Best effort; verify on device."""
+    """Publish the most recent gallery video as a Reel.
+
+    NOT exercised on the device (no video in the explorer's gallery): same ids
+    as the verified photo path, with the Reel tab in between.
+    """
 
     name = "post_reel_action"
     description = "Create → Reel → newest gallery item → Next → caption → Share"
@@ -70,7 +93,7 @@ class PostReelAction(Action):
         adapter._tap_el("create_reel", xml) or adapter._tap_text(xml, "Reel")
         human.pause(2.0)
         xml = self.device.dump_xml()
-        if not adapter._tap_el("gallery_first_item", xml):
+        if not (adapter._tap_el("gallery_first_item", xml) or adapter._tap_el("gallery_tray_item", xml)):
             return ActionResult(success=False, error="gallery item not found")
         human.pause(2.0)
         for _ in range(2):  # Next (trim) → Next (edit)
@@ -79,11 +102,13 @@ class PostReelAction(Action):
                 break
             human.pause(2.5)
         xml = self.device.dump_xml()
-        if not (adapter._tap_el("caption_input", xml) or adapter._tap_text(xml, "Write a caption")):
+        if not _tap_caption_field(adapter, human, xml):
             return ActionResult(success=False, error="caption field not found")
         human.pause(0.8)
         human.type_text(self.caption)
-        self.device.back(delay=1.0)  # close keyboard
+        xml = self.device.dump_xml()
+        if not adapter._tap_el("caption_ok", xml):
+            self.device.back(delay=1.0)  # close keyboard
         xml = self.device.dump_xml()
         if not (adapter._tap_el("share_button_final", xml) or adapter._tap_text(xml, "Share")):
             return ActionResult(success=False, error="Share button not found")
@@ -110,10 +135,12 @@ class PostVideo(Workflow):
 
 
 class PostPhotoAction(Action):
-    """Publish the most recent gallery image to the feed. Best effort; verify on device.
+    """Publish the most recent gallery image to the feed.
 
-    Same shape as :class:`PostReelAction`, one tab over: Create → POST instead
-    of Create → REEL. It shares the ``POST`` budget with the Reel workflow —
+    Verified on the device (screens-instagram-actions.md §1 ``post``): the "+"
+    of the feed → newest tray item → Next → caption in a full-screen editor
+    closed by OK → Share; the feed then shows "<handle> posted a photo N
+    seconds ago". Same shape as :class:`PostReelAction`, one tab over. It shares the ``POST`` budget with the Reel workflow —
     one post a day on the device, whatever its format (R14) — and, like it,
     takes "the most recent item in the gallery", which is why the bridge pushes
     one media at a time per phone.
@@ -123,7 +150,7 @@ class PostPhotoAction(Action):
     """
 
     name = "post_photo_action"
-    description = "Create → Post → newest gallery item → Next ×2 → caption → Share"
+    description = "Create (+) → newest gallery item → Next ×2 → caption (editor, OK) → Share"
     max_retries = 1
 
     def __init__(self, device, elements, *, handle: str = "", caption: str = "", **kwargs):
@@ -153,11 +180,11 @@ class PostPhotoAction(Action):
             return ActionResult(success=False, error="Create tab not found")
         human.pause(2.0)
         xml = self.device.dump_xml()
-        if not (adapter._tap_el("create_post", xml) or adapter._tap_text(xml, "POST")):
-            return ActionResult(success=False, error="Post tab not found")
-        human.pause(2.0)
-        xml = self.device.dump_xml()
-        if not adapter._tap_el("gallery_first_item", xml):
+        # the "+" of this build opens the gallery in POST mode; older builds show a tab
+        if adapter._tap_el("create_post", xml) or adapter._tap_text(xml, "POST"):
+            human.pause(2.0)
+            xml = self.device.dump_xml()
+        if not (adapter._tap_el("gallery_first_item", xml) or adapter._tap_el("gallery_tray_item", xml)):
             return ActionResult(success=False, error="gallery item not found")
         human.pause(2.0)
         for _ in range(2):  # Next (crop) → Next (filters)
@@ -166,11 +193,15 @@ class PostPhotoAction(Action):
                 break
             human.pause(2.5)
         xml = self.device.dump_xml()
-        if not (adapter._tap_el("caption_input", xml) or adapter._tap_text(xml, "Write a caption")):
+        if not _tap_caption_field(adapter, human, xml):
             return ActionResult(success=False, error="caption field not found")
         human.pause(0.8)
         human.type_text(self.caption)
-        self.device.back(delay=1.0)  # close keyboard
+        # the caption is typed in a full-screen editor closed by "OK"; its field
+        # keeps the hint "Write a caption" once filled — never verify on it
+        xml = self.device.dump_xml()
+        if not adapter._tap_el("caption_ok", xml):
+            self.device.back(delay=1.0)  # no editor on this build: just close the keyboard
         xml = self.device.dump_xml()
         if not (adapter._tap_el("share_button_final", xml) or adapter._tap_text(xml, "Share")):
             return ActionResult(success=False, error="Share button not found")
@@ -199,6 +230,11 @@ class PostPhoto(Workflow):
 class PostStoryAction(Action):
     """Publish the most recent gallery item as a story.
 
+    Verified on the device (screens-instagram-actions.md §1 ``story_post``):
+    STORY tab → camera then microphone permission → ``gallery_preview_button``
+    → ``your_story_share_shortcut_button``; the tray then shows "<handle>'s
+    story, 0 of N, Unseen".
+
     A story is **not** a post: it spends ``STORY_POST`` (1 a day from `network`
     on, Instagram only, ``policy.py``), never the ``POST`` budget nor its weekly
     cap, and it is not counted as a publication (warming-policy.md §2). Like the
@@ -209,7 +245,7 @@ class PostStoryAction(Action):
     """
 
     name = "post_story_action"
-    description = "Create → Story → newest gallery item → Your story"
+    description = "Create (+) → STORY → camera/mic permissions → gallery → Your story"
     max_retries = 1
 
     def __init__(self, device, elements, *, handle: str = "", **kwargs):
@@ -241,13 +277,23 @@ class PostStoryAction(Action):
         if not (adapter._tap_el("create_story", xml) or adapter._tap_text(xml, "STORY")):
             return ActionResult(success=False, error="Story tab not found")
         human.pause(2.0)
+        # the STORY tab asks for the camera, then the microphone (verified)
+        for _ in range(2):
+            xml = self.device.dump_xml()
+            if not adapter._tap_el("permission_allow", xml):
+                break
+            human.pause(1.0)
         xml = self.device.dump_xml()
-        if not adapter._tap_el("gallery_first_item", xml):
+        if not (adapter._tap_el("story_gallery", xml) or adapter._tap_el("gallery_first_item", xml)):
             return ActionResult(success=False, error="gallery item not found")
         human.pause(2.5)
         xml = self.device.dump_xml()
-        if not (adapter._tap_el("your_story", xml) or adapter._tap_text(xml, "Your story")):
+        if not (adapter._tap_el("story_share", xml) or adapter._tap_text(xml, "Your story")):
             return ActionResult(success=False, error="Your story button not found")
+        human.pause(1.5)
+        xml = self.device.dump_xml()
+        if "Stories archive" in xml:  # first story ever: a one-time notice
+            adapter._tap_text(xml, "OK")
         sleep(6)
         session.record(policy.STORY_POST)
         return ActionResult(success=True, data={"format": "story"})

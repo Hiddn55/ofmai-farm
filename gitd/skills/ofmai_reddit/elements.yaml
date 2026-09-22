@@ -1,90 +1,128 @@
 # Reddit UI elements — fallback chain: content_desc -> text -> resource_id -> coords
 #
-# STATUS: written from the en-US accessibility labels of Reddit for Android
-# (2026). NOT verified on a device: run Skill Miner on the first phone, fix the
-# ids here, then fill `tested_on` in skill.yaml (R34). Content-desc first,
-# resource-id second, coordinates never.
+# STATUS: VERIFIED on a device — GeeLark `explorer-us` (Samsung Galaxy S20
+# emulated, Android 13, 720x1440), Reddit 2026.35.0, on 2026-09-16 and
+# 2026-09-19. Source of truth: docs/social/screens-reddit.md and
+# docs/social/screens-reddit-actions.md. Every locator below was read from a
+# `uiautomator dump` of the real app; nothing is guessed from accessibility
+# labels any more.
 #
-# The unit of a "view" on Reddit is a post card of the Home feed. `like` is the
-# upvote (under the likes cap); the downvote is never tapped, and no vote is
-# ever cast in return for one received (docs/social/publishing.md §9).
+# Reddit is written in Jetpack Compose, and Compose ids are BARE: the dump
+# says resource-id="post_footer", never "com.reddit.frontpage:id/post_footer"
+# (only the two classic containers, main_activity_navhost and frame_container,
+# carry the package). A prefixed selector matches nothing — verified the hard
+# way on 2026-09-19, when the adapter could not see the feed it was on.
+#
+# The bottom navigation, the post card,
+# the join button, the overflow menu, the comment rows and the profile expose
+# resource ids. The VOTE, COMMENTS and SHARE buttons of a post expose NOTHING —
+# no id, no content-desc: they only exist as fixed positions inside the
+# `post_footer` node. That is why they are not named here and why
+# actions/core.py finds the footer and taps at a fraction of its width
+# (`FOOTER_X`). The same holds for the ⋮ / Reply / vote controls of a comment,
+# inside `fbp_comment_footer` (`COMMENT_FOOTER_X`).
+#
+# Verification is visual for votes (the arrow turns orange), and by state or
+# counter for everything else (`Join` -> `Joined`, `Save` -> `Unsave`,
+# "N comments"). A gesture that proves nothing is never recorded.
 
-# -- Bottom navigation ---------------------------------------------------------
+# -- Bottom navigation (the labels are text nodes; verified) -------------------
 home_tab:
-  content_desc: "Home"
   text: "Home"
-communities_tab:
-  content_desc: "Communities"
 create_tab:
-  content_desc: "Create"
-chat_tab:
-  content_desc: "Chat"
+  text: "Create"
 inbox_tab:
-  content_desc: "Inbox"
+  text: "Inbox"
 profile_tab:
-  content_desc: "Profile"
+  text: "You"
 
-# -- Home feed -----------------------------------------------------------------
-hot_tab:
-  text: "Hot"
-new_tab:
-  text: "New"
-upvote_button:
-  content_desc: "Upvote"
-downvote_button:
-  content_desc: "Downvote"
-comment_button:
-  content_desc: "Comments"
-share_button:
-  content_desc: "Share"
+# -- Home feed: one post card ---------------------------------------------------
+post_card:
+  resource_id: "post_unit"
+post_header:
+  resource_id: "post_header"
+post_subreddit_icon:
+  resource_id: "post_subreddit_icon"
+# text "Join" before, "Joined" after — the state flip that proves a follow
+join_button:
+  resource_id: "post_join_button"
+# the "..." menu of the card; its rows are `overflow_item` ("Share", "Save"/"Unsave")
 more_button:
-  content_desc: "More options"
+  resource_id: "post_overflow"
+overflow_item:
+  resource_id: "action_item_title"
 save_option:
   text: "Save"
-author_name:
-  resource_id: "com.reddit.frontpage:id/author"
-subreddit_name:
-  resource_id: "com.reddit.frontpage:id/subreddit_name"
-join_button:
-  text: "Join"
-joined_button:
-  text: "Joined"
+unsave_option:
+  text: "Unsave"
+# the row that carries upvote / downvote / comments / repost / share — no
+# children exposed, see FOOTER_X in actions/core.py
+post_footer:
+  resource_id: "post_footer"
 
-# -- Comment composer ------------------------------------------------------------
+# -- Post page and its comments --------------------------------------------------
+# the post page's title bar shows the community ("r/zelda")
+page_title:
+  resource_id: "title_text"
+comment_row:
+  resource_id: "comment_layout"
+# content-desc "Level 1 comment by <author>, <age>, <n> votes" — the only place
+# a comment's author is exposed (replies.py reads it)
+comment_header:
+  resource_id: "comment_header"
+# "N votes" — and the row that holds ⋮ / Reply / up / down, see COMMENT_FOOTER_X
+comment_footer:
+  resource_id: "fbp_comment_footer"
+# the composer opens from this bar at the bottom of the post page
 comment_input:
-  text: "Add a comment"
-  resource_id: "com.reddit.frontpage:id/reply_text"
+  content_desc: "Join the conversation"
 comment_send:
-  content_desc: "Post comment"
-  text: "Reply"
+  content_desc: "Send comment"
+comments_search:
+  resource_id: "action_search_comments"
 
-# -- Profile ------------------------------------------------------------------------
-follow_button:
-  text: "Follow"
-following_button:
-  text: "Following"
-back_button:
-  content_desc: "Back"
-
-# -- Search ----------------------------------------------------------------------------
+# -- Search --------------------------------------------------------------------------
 search_icon:
-  content_desc: "Search"
+  resource_id: "main_top_app_bar_search"
 search_input:
-  text: "Search Reddit"
-  resource_id: "com.reddit.frontpage:id/search_view"
+  resource_id: "expanded_search_field"
+search_suggestion:
+  resource_id: "typeahead_suggestion_item"
+search_section:
+  resource_id: "search_section_title"
 
-# -- Own post: its comments (comment_reply, E3.2) ------------------------------
-# [to verify on the device] the three resource ids below. `profile_first_post`
-# is the topmost post of the profile page; the two rows below are what
-# gitd/farm/replies.pair_comments() reads to build (author, text) pairs. There
-# is no per-comment like element on purpose: RedditCommentAdapter sets
-# `likes_back = False` — a vote cast in return for one received is vote
-# manipulation (docs/social/publishing.md §9).
-profile_first_post:
-  resource_id: "com.reddit.frontpage:id/link_title"
-post_title:
-  resource_id: "com.reddit.frontpage:id/link_title"
-comment_author_row:
-  resource_id: "com.reddit.frontpage:id/author"
-comment_text_row:
-  resource_id: "com.reddit.frontpage:id/comment_body"
+# -- Own profile ("You" tab) ----------------------------------------------------------
+profile_name:
+  resource_id: "profile_name"
+# "1 Karma" — the number OFMAI's Reddit gate needs (publishing.md §5); read by
+# RedditAdapter.read_karma through gitd.farm.warm.parse_karma
+profile_karma:
+  resource_id: "profile_highlights_karma"
+profile_age:
+  resource_id: "profile_highlights_age"
+profile_tab_label:
+  resource_id: "profile_tab_text"
+
+# -- Post composer --------------------------------------------------------------------
+# Kept for the record: a Reddit publication only ever goes out through the API
+# (publishing.md §5), the device never posts. Verified on the device all the
+# same (a test post in r/test on 2026-09-19).
+community_selector:
+  resource_id: "community_selector"
+community_search:
+  resource_id: "community_picker_search_bar_tag"
+community_name:
+  resource_id: "community_name_tag"
+post_title_field:
+  resource_id: "post_title_field"
+post_body_field:
+  resource_id: "post_body_field"
+post_submit:
+  resource_id: "action_button_label"
+
+# -- Interstitials (also dismissed by skill.yaml popup_detectors) ----------------------
+# the welcome sheet of a community you just joined
+welcome_got_it:
+  resource_id: "got_it_button"
+sheet_close:
+  content_desc: "Close sheet"

@@ -1,7 +1,7 @@
 name: ofmai_instagram
 display_name: OFMAI Instagram
 description: Instagram warming, posting and replies for OFMAI characters — humanised, budgeted by the farm ledger
-version: "0.1.0"
+version: "0.2.0"
 app_package: com.instagram.android
 author: OFMAI
 license: MIT
@@ -50,7 +50,15 @@ exports:
         replies_thanks: { type: string, required: false, description: "newline-separated ASCII replies" }
         replies_question: { type: string, required: false, description: "newline-separated ASCII replies" }
 
+# `button` is matched on text or content-desc, exactly. The first three were
+# met on the device (screens-instagram-actions.md §2).
 popup_detectors:
+  - detect: "Introducing"
+    button: "Not now"
+    label: "Promotional interstitial (Instagram map, instants…) — lands at any moment"
+  - detect: "Stories archive"
+    button: "OK"
+    label: "First-story notice"
   - detect: "Turn on Notifications"
     button: "Not Now"
     label: "Notifications popup"
@@ -103,4 +111,13 @@ default_params:
 # Health signals ("Action Blocked", "Confirm it's you", ...) are matched by
 # gitd/farm/health.py, not here: they end the session instead of being dismissed.
 
-tested_on: []
+# R34: every id of elements.yaml and every gesture of actions/ were read from
+# uiautomator dumps and exercised on this device, on the explorer account
+# (never a character). Source: docs/social/screens-instagram-actions.md.
+tested_on:
+  - device: "GeeLark explorer-us (Samsung Galaxy S20 emulated, Android 13, 720x1440)"
+    app_version: "443.0.0.48.82"
+    date: "2026-09-16"
+    verified: [view, like, save, follow, comment, comment_reply, post_photo, post_story, story_view, profile_visit, search]
+    unverified: [post_video, dm_reply]
+    notes: "like by Like->Liked, save by Add to Saved->Remove from saved, follow by Follow x->Following x, story by unseen->seen; dm_reply needs an incoming message, post_video a video in the gallery"

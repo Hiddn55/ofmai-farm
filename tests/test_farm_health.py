@@ -87,3 +87,14 @@ def test_every_platform_with_a_skill_has_health_patterns():
     for platform in planner.SKILL_BY_PLATFORM:
         assert platform in _PATTERNS, platform
         assert set(_PATTERNS[platform]) == set(_ORDER), platform
+
+
+def test_a_reinstated_instagram_account_is_not_a_suspension():
+    """The screen that follows an approved appeal (seen 2026-09-16 on the
+    explorer account): it names the suspension only to say it is over."""
+    xml = (
+        '<node text="You\'re back on Instagram"/>'
+        '<node text="Your account is no longer suspended. Thanks for your patience."/>'
+        '<node text="Continue to Instagram"/>'
+    )
+    assert detect("instagram", xml) is None

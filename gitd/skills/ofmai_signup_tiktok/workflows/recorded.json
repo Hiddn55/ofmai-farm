@@ -3,36 +3,66 @@
     "action": "launch",
     "package": "com.zhiliaoapp.musically",
     "description": "Launch TikTok on the character's phone",
-    "goal": "Day 3 of the phone; the Instagram account created on day 1 has been warming since",
-    "verified": false
+    "goal": "Day 3 of the phone. Walked on GeeLark explorer-us (TikTok 46.8.2, 2026-09-16 by email — refused at the phone gate — and 2026-09-18 by the character's US line, which created the account; account-creation.md §4 ter, screens-tiktok-actions.md §6)",
+    "verified": true
   },
-  { "action": "wait", "seconds": 10, "description": "Cold start — TikTok is slow on first open", "verified": false },
-  { "action": "tap", "text": "Sign up", "description": "Start a signup [to verify]", "verified": false },
+  {
+    "action": "wait",
+    "seconds": 10,
+    "description": "Cold start — TikTok is slow on first open",
+    "verified": true
+  },
+  {
+    "action": "tap",
+    "text": "Sign up",
+    "description": "Start a signup",
+    "verified": true
+  },
   {
     "action": "tap",
     "text": "Use phone or email",
-    "description": "Never a social login: the account must belong to this email only [to verify]",
-    "verified": false
+    "description": "Never a social login: the account must belong to this character only",
+    "verified": true
   },
-  { "action": "tap", "text": "Email", "description": "Email tab, not phone [to verify]", "verified": false },
   {
     "action": "checkpoint",
     "reason": "generic",
-    "prompt": "TikTok asks for the birthday FIRST. Set {birthday} on the wheel (18+) and tap Next, then resume.",
+    "prompt": "TikTok asks for the birthday FIRST, on a wheel that is NOT editable (unlike Instagram's): about 6 notches per 340 px swipe at 400 ms. Set {birthday} (18+, R2) and tap Next. Then resume.",
     "timeout_s": 0,
-    "description": "Birthday, before the email on TikTok (account-creation.md §6.2)",
-    "verified": false
+    "description": "Birthday, before anything else (verified)",
+    "verified": true
   },
-  { "action": "tap", "text": "Email address", "description": "Focus the email field [to verify]", "verified": false },
-  { "action": "type", "text": "{email}", "description": "The character's own Gmail, created at J0", "verified": false },
-  { "action": "tap", "text": "Send code", "description": "Ask for the email code [to verify]", "verified": false },
+  {
+    "action": "tap",
+    "text": "Phone",
+    "description": "The Phone tab — BY NUMBER, not by email: an email signup is accepted and then blocked by 'For security purposes, link your phone number to your account', whose Back only rewinds to the code screen (§4 ter). The number is asked either way; asking it first is one gate instead of two. TikTok derives the username from the nickname typed later, so the handle is set there",
+    "verified": true
+  },
+  {
+    "action": "tap",
+    "class_name": "android.widget.EditText",
+    "description": "The number field (US country code pre-selected on a US-located phone)",
+    "verified": true
+  },
+  {
+    "action": "type",
+    "text": "{phone}",
+    "description": "The character's OWN US line, digits only, bought for this character and never shared: 'This phone number is already taken' is what a reused number gets (§4 ter)",
+    "verified": true
+  },
+  {
+    "action": "tap",
+    "text": "Send code",
+    "description": "Ask for the SMS code",
+    "verified": true
+  },
   {
     "action": "checkpoint",
-    "reason": "email",
-    "prompt": "Read the code for {email} in the Gmail notification (GET /api/phone/notifications/<serial>) and type it on the device (POST /api/phone/type). Do not open Gmail — TikTok would lose the foreground. Then resume.",
+    "reason": "sms",
+    "prompt": "Read the 6-digit code on the character's line (short-code SMS reach the line abroad, numeros-us.md) and type it with POST /api/phone/type. Write 'sms: line-<character> <date> tiktok' in the ledger notes — never the number. Then resume.",
     "timeout_s": 0,
-    "description": "Email code",
-    "verified": false
+    "description": "SMS code (verified: delivered and accepted on 2026-09-18)",
+    "verified": true
   },
   {
     "action": "checkpoint",
@@ -40,52 +70,55 @@
     "prompt": "Type the TikTok password for {handle} on the device. Read it from the Keychain (ofmai-social-tiktok-<slug>) and type it with POST /api/phone/type; it is never a parameter of this run (R9). Tap Next, then resume.",
     "timeout_s": 0,
     "description": "Password — typed by a human",
+    "verified": true
+  },
+  {
+    "action": "checkpoint",
+    "reason": "email",
+    "prompt": "TikTok may ask for an email as a recovery address: type {email} (the character's own mailbox, whose app is on this phone) and the 6-digit code from the phone's notifications (GET /api/phone/notifications/<serial>). If no email screen is shown, just resume.",
+    "timeout_s": 0,
+    "description": "Recovery email — only if asked (not seen on the phone-first run)",
     "verified": false
   },
   {
     "action": "checkpoint",
     "reason": "captcha",
-    "prompt": "TikTok shows a slider or a 'select 2 objects' puzzle here. Those same strings are health.py's `verification` patterns, but at signup this is a normal gate: solve it by hand (R25). Three failures in a row end the day. Then resume.",
+    "prompt": "If a slider or a 'select 2 objects' puzzle is on screen — those same strings are health.py's `verification` patterns, at signup they are a normal gate — solve it by hand (R25). Three failures in a row end the day. If there is no puzzle, just resume.",
     "timeout_s": 0,
-    "description": "Captcha — expected on TikTok (account-creation.md §6.2)",
-    "verified": false
+    "description": "Captcha — possible on TikTok (not seen on the phone-first run)",
+    "verified": true
+  },
+  {
+    "action": "checkpoint",
+    "reason": "generic",
+    "prompt": "Nickname screen: type {name}. TikTok DERIVES THE USERNAME FROM THE NICKNAME ('Jordan Reed' -> @jordan.reed90, verified) — the handle {handle} is set in the profile editor afterwards. Dismiss the interest picker and any follow suggestion without following anyone (R16). Then resume.",
+    "success": {
+      "screen_has": "Home"
+    },
+    "timeout_s": 0,
+    "description": "Nickname, interests, first feed",
+    "verified": true
   },
   {
     "action": "tap",
-    "text": "Username",
-    "description": "TikTok assigns a random username; open the field to replace it [to verify]",
+    "text": "Profile",
+    "description": "Profile tab of the bottom bar (648, 1322)",
+    "verified": true
+  },
+  {
+    "action": "tap",
+    "text": "Edit profile",
+    "description": "Open the profile editor",
     "verified": false
   },
-  { "action": "type", "text": "{handle}", "description": "Handle 1 of the persona sheet", "verified": false },
-  { "action": "tap", "text": "Next", "description": "Submit the username [to verify]", "verified": false },
   {
     "action": "checkpoint",
     "reason": "generic",
-    "prompt": "If the username is taken, clear it and type fallback handle 2, then 3, from the persona sheet — and update the sheet. Dismiss the interest picker and any follow suggestion without following anyone (R16). Then resume.",
+    "prompt": "Profile editor: Username -> {handle} (fallback handles 2 and 3 of the sheet if taken); Name -> {name}; Bio -> {bio} (one line, ASCII, no link: TikTok gates links anyway and R22 forbids one before day 24); picture -> the MOST RECENT gallery item, the watermarked SFW variant pushed with adb push minutes ago. Save. Then resume.",
     "timeout_s": 0,
-    "description": "Username availability and onboarding",
+    "description": "Username, name, bio, avatar (editor labels not mined, R34)",
     "verified": false
   },
-  { "action": "tap", "text": "Profile", "description": "Profile tab [to verify]", "verified": false },
-  { "action": "tap", "text": "Edit profile", "description": "Open the profile editor [to verify]", "verified": false },
-  {
-    "action": "checkpoint",
-    "reason": "generic",
-    "prompt": "Profile picture: open the picture editor and pick the MOST RECENT gallery item — the watermarked SFW variant pushed with adb push minutes ago. Confirm, come back to the editor, then resume.",
-    "timeout_s": 0,
-    "description": "Avatar",
-    "verified": false
-  },
-  { "action": "tap", "text": "Name", "description": "Focus the display-name field [to verify]", "verified": false },
-  { "action": "type", "text": "{name}", "description": "Display name from the persona sheet", "verified": false },
-  { "action": "tap", "text": "Bio", "description": "Focus the bio field [to verify]", "verified": false },
-  {
-    "action": "type",
-    "text": "{bio}",
-    "description": "TikTok bio of the persona sheet — one line, ASCII, no link (TikTok gates links anyway, and R22 forbids one before day 24)",
-    "verified": false
-  },
-  { "action": "tap", "text": "Save", "description": "Save the profile [to verify]", "verified": false },
   {
     "action": "checkpoint",
     "reason": "generic",
@@ -94,14 +127,21 @@
     "description": "Privacy settings",
     "verified": false
   },
-  { "action": "tap", "text": "Profile", "description": "Back to the profile [to verify]", "verified": false },
+  {
+    "action": "tap",
+    "text": "Profile",
+    "description": "Back to the profile",
+    "verified": true
+  },
   {
     "action": "checkpoint",
     "reason": "generic",
-    "prompt": "Last look: the profile shows {handle}, the bio and the picture, and no link. Register it on the Mac mini the same day — accounts add tiktok @{handle} --device <serial> --tz <persona tz> --created-on <today> — then resume to close the run.",
-    "success": { "screen_has": "{handle}" },
+    "prompt": "Last look: the profile shows @{handle}, the bio and the picture, and no link. Register it on the Mac mini the same day — accounts add tiktok @{handle} --device <GeeLark profile> --tz <persona tz> --created-on <today> — then resume to close the run.",
+    "success": {
+      "screen_has": "{handle}"
+    },
     "timeout_s": 0,
     "description": "The run ends on the profile screen showing {handle}",
-    "verified": false
+    "verified": true
   }
 ]

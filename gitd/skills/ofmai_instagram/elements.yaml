@@ -1,118 +1,173 @@
 # Instagram UI elements — fallback chain: content_desc -> text -> resource_id -> coords
 #
-# STATUS: written from the en-US accessibility labels of Instagram for Android
-# (2026). NOT yet verified on a device: run Skill Miner on the first phone,
-# then fix the ids here and fill `tested_on` in skill.yaml. Keep content_desc
-# first: labels survive app updates far better than resource ids.
+# STATUS: VERIFIED on a device — GeeLark `explorer-us` (Samsung Galaxy S20
+# emulated, Android 13, 720x1440), Instagram 443.0.0.48.82, 2026-09-16, account
+# jordan.reed.97. Source of truth: docs/social/screens-instagram-actions.md and
+# screens-instagram.md. Every `resource_id` below was read from a `uiautomator
+# dump` of the real app. Instagram's ids are stable and readable; its
+# content-descs flip with the state (`Like` -> `Liked`, `Add to Saved` ->
+# `Remove from saved`, `Follow x` -> `Following x`, `unseen story` -> `seen
+# story`) — that flip is how actions/core.py proves a gesture, and why a
+# gesture that does not flip anything is never recorded.
 #
-# Many buttons are found by *contains* matching in actions/core.py (e.g. the
-# like button's label is "Like" or "Liked"; a story's label ends with
-# "'s story"). Entries below are the exact-match fast path.
+# The warming surface is the HOME FEED (row_feed_*), the one that was surveyed.
+# A content-desc listed first is the exact-match fast path (and what the test
+# fixtures use); the id is what the device really exposes.
 
-# -- Bottom navigation ---------------------------------------------------------
+# -- Bottom navigation (verified positions: 72 / 216 / 360 / 504 / 648 x 1326) --
 home_tab:
   content_desc: "Home"
   resource_id: "com.instagram.android:id/feed_tab"
-search_tab:
-  content_desc: "Search and explore"
-  resource_id: "com.instagram.android:id/search_tab"
 reels_tab:
   content_desc: "Reels"
   resource_id: "com.instagram.android:id/clips_tab"
-create_tab:
-  content_desc: "Create"
-  resource_id: "com.instagram.android:id/creation_tab"
+direct_inbox:
+  content_desc: "Direct"
+  resource_id: "com.instagram.android:id/direct_tab"
+search_tab:
+  content_desc: "Search and explore"
+  resource_id: "com.instagram.android:id/search_tab"
 profile_tab:
   content_desc: "Profile"
   resource_id: "com.instagram.android:id/profile_tab"
+# the "+" at the top-left of the feed (39, 84) — there is no creation tab in
+# the bottom bar of this build
+create_tab:
+  content_desc: "Create"
+  resource_id: "com.instagram.android:id/action_bar_buttons_container_left"
 
-# -- Reels viewer --------------------------------------------------------------
+# -- Home feed: one post ------------------------------------------------------------
+# the media; its content-desc carries author, likes, comments and age
+post_media:
+  resource_id: "com.instagram.android:id/row_feed_photo_imageview"
+# the author's handle, as text — tapping it opens the profile
+post_author:
+  resource_id: "com.instagram.android:id/row_feed_photo_profile_name"
+post_avatar:
+  content_desc: "Profile picture"
+  resource_id: "com.instagram.android:id/row_feed_photo_profile_imageview"
+# the like / comment / share / save bar of a post; it has NO fixed position on
+# screen (same ids at y=351 and y=1164 on one dump): resolve inside the post
+post_buttons:
+  resource_id: "com.instagram.android:id/row_feed_view_group_buttons"
+# content-desc "Like" before, "Liked" after; clickable="false" (never filter on it)
 like_button:
-  content_desc: "Like"
-liked_button:
-  content_desc: "Liked"
+  resource_id: "com.instagram.android:id/row_feed_button_like"
 comment_button:
   content_desc: "Comment"
+  resource_id: "com.instagram.android:id/row_feed_button_comment"
 share_button:
-  content_desc: "Share"
-more_button:
-  content_desc: "More options"
+  resource_id: "com.instagram.android:id/row_feed_button_share"
+# content-desc "Add to Saved" before, "Remove from saved" after
 save_button:
-  content_desc: "Save"
-author_avatar:
-  content_desc: "Profile picture"
-author_name:
-  resource_id: "com.instagram.android:id/clips_username"
+  resource_id: "com.instagram.android:id/row_feed_button_save"
 
-# -- Comments sheet -------------------------------------------------------------
+# -- Comments sheet ------------------------------------------------------------------
+# the composer (hint "Join the conversation…"); the legacy id is what older
+# builds expose, the adapter tries both
 comment_input:
-  text: "Add a comment…"
+  resource_id: "com.instagram.android:id/layout_comment_thread_edittext_multiline"
+comment_input_legacy:
   resource_id: "com.instagram.android:id/layout_comment_thread_edittext"
 comment_post:
   content_desc: "Post"
-  resource_id: "com.instagram.android:id/layout_comment_thread_post_button"
+  resource_id: "com.instagram.android:id/layout_comment_thread_post_button_icon"
+comment_reply_link:
+  text: "Reply"
 
-# -- Profile ---------------------------------------------------------------------
+# -- Someone else's profile -------------------------------------------------------------
+# content-desc "Follow <name>" before, "Following <name>" after
 follow_button:
-  text: "Follow"
-following_button:
-  text: "Following"
+  resource_id: "com.instagram.android:id/profile_header_follow_button"
+# the carousel Instagram pushes right after a follow — the chain-follow rail:
+# named so the adapter can make sure it never taps it (R16)
+suggested_follow:
+  resource_id: "com.instagram.android:id/suggested_user_card_follow_button"
+profile_posts_count:
+  resource_id: "com.instagram.android:id/profile_header_familiar_post_count_value"
+profile_followers_count:
+  resource_id: "com.instagram.android:id/profile_header_familiar_followers_value"
+profile_following_count:
+  resource_id: "com.instagram.android:id/profile_header_familiar_following_value"
+# `button_container` serves "Edit profile" AND "Share profile" (and "Message" /
+# "Shop" on someone else's): only the content-desc tells them apart
+edit_profile:
+  content_desc: "Edit profile"
 back_button:
   content_desc: "Back"
 
-# -- Search --------------------------------------------------------------------
+# -- Search -------------------------------------------------------------------------------
 search_input:
   resource_id: "com.instagram.android:id/action_bar_search_edit_text"
+# the results: the handle, and the full name that already carries the follower
+# count ("Gymshark • 8.6M followers") — picking follow targets needs no visit
+search_result_user:
+  resource_id: "com.instagram.android:id/row_search_user_username"
+search_result_fullname:
+  resource_id: "com.instagram.android:id/row_search_user_fullname"
+search_query_header:
+  resource_id: "com.instagram.android:id/serp_journey_header_query_text"
 
-# -- Stories (home) ---------------------------------------------------------------
+# -- Stories (home) ------------------------------------------------------------------------
+# a ring of the tray: content-desc "<handle>'s unseen story" -> "<handle>'s seen story"
+story_ring:
+  resource_id: "com.instagram.android:id/row_profile_header_imageview"
 your_story:
   content_desc: "Your story"
 
-# -- Create / post ------------------------------------------------------------------
+# -- Promotional interstitials ("Introducing the Instagram map", "Introducing instants")
+# they land at any moment and share one dismiss button; settled before every gesture
+promo_dismiss:
+  resource_id: "com.instagram.android:id/igds_headline_secondary_action_text_button"
+
+# -- Create / post (verified sequence, screens-instagram-actions.md §1 `post`) ---------
 create_reel:
   text: "REEL"
 create_post:
   text: "POST"
+create_story:
+  text: "STORY"
 gallery_first_item:
   resource_id: "com.instagram.android:id/gallery_grid_item_thumbnail"
+# the newest item of the tray, as this build names it
+gallery_tray_item:
+  resource_id: "com.instagram.android:id/media_thumbnail_tray_button"
 next_button:
   content_desc: "Next"
+  resource_id: "com.instagram.android:id/next_button_textview"
+# KEEPS the hint "Write a caption" even once filled — never verify the caption
+# on it. Tapping its centre opens the preview: tap its LEFT part. The caption
+# is typed in a full-screen editor closed by "OK" (top right)
 caption_input:
   text: "Write a caption..."
   resource_id: "com.instagram.android:id/caption_input_text_view"
+caption_ok:
+  text: "OK"
 share_button_final:
   text: "Share"
-create_story:
-  text: "STORY"
-# The composer's share button. `your_story` above (content-desc "Your story") is
-# the home feed's story ring; in the story composer the same words appear as the
-# button that publishes. PostStoryAction tries the element first, then the text.
-# [to verify on the device] the composer's exact label ("Your story" vs
-# "Add to story" vs "Share to > Your story"), and whether Instagram asks for a
-# confirmation after the tap.
+  resource_id: "com.instagram.android:id/share_footer_button"
+# story composer: STORY tab asks for the camera, then the microphone
+permission_allow:
+  resource_id: "com.android.permissioncontroller:id/permission_allow_foreground_only_button"
+story_gallery:
+  resource_id: "com.instagram.android:id/gallery_preview_button"
 story_share:
   text: "Your story"
+  resource_id: "com.instagram.android:id/your_story_share_shortcut_button"
 
-# -- Own post: comments (comment_reply, E3.2) -------------------------------------
-# [to verify on the device] all four resource ids below. `profile_grid_first_item`
-# is the newest tile of the profile grid; the two comment rows are what
-# gitd/farm/replies.pair_comments() reads to build (author, text) pairs.
+# -- Own post: comments (comment_reply, E3.2) ------------------------------------------
 profile_grid_first_item:
   resource_id: "com.instagram.android:id/media_thumbnail"
 comment_author_row:
   resource_id: "com.instagram.android:id/row_comment_textview_username"
 comment_text_row:
   resource_id: "com.instagram.android:id/row_comment_textview_comment"
-comment_reply_link:
-  text: "Reply"
 
-# -- Direct messages (dm_reply, E3.3) ---------------------------------------------
-# [to verify on the device] all of these. Incoming and outgoing bubbles are told
-# apart by geometry (left half = incoming), not by a resource id, so only the
-# row id has to be right for the "never answer without an incoming message"
-# rule to hold.
-direct_inbox:
-  content_desc: "Direct"
+# -- Direct messages (dm_reply, E3.3) -----------------------------------------------------
+# Not exercised on the device: a brand-new account has no incoming message
+# (screens-instagram-actions.md §1, `dm_reply`). Incoming and outgoing bubbles
+# are told apart by geometry (left half = incoming), so only the row id has to
+# be right for the "never answer without an incoming message" rule to hold.
 dm_thread_row:
   resource_id: "com.instagram.android:id/row_inbox_username"
 dm_message_row:

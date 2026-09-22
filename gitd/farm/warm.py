@@ -94,6 +94,9 @@ DETOUR_EVERY = (12, 30)
 # "Put the phone down": probability per video and duration range (seconds).
 PHONE_DOWN_RATE = 0.03
 PHONE_DOWN_S = (20.0, 90.0)
+# Verified gestures that fired and proved nothing on screen, in a row, before
+# the session stops as an ``action_blocked`` signal (see SessionStats.silent).
+SILENT_GESTURES_MAX = 3
 
 
 @dataclass
@@ -108,6 +111,13 @@ class SessionStats:
     seconds: float = 0.0
     health: str | None = None
     error: str | None = None
+    # Gestures the adapter fired and then could not confirm on screen (its
+    # ``last_gesture_silent`` flag): a like that never turns into "Liked", a
+    # join that never turns into "Joined". Three in a row end the session as
+    # ``action_blocked`` — that is what a soft block looks like from the
+    # device, long before any banner says so. An adapter that does not verify
+    # never raises the flag, and this stays at zero.
+    silent: int = 0
     # Texts actually posted, reported back to OFMAI so the pool can retire them
     # (bridge-ofmai-farm.md §4.1): a comment is drawn at random from the list, so
     # the order is not predictable without saying which ones were used.
@@ -142,6 +152,25 @@ def run_session(
     t0 = now()
     comments = list(cfg.comments)
     next_detour = rng.randint(*DETOUR_EVERY)
+
+    def silent_after(ok: bool) -> bool:
+        """After a gesture the adapter verifies: count a silence, stop at the cap.
+
+        ``ok`` is what the adapter returned. A False with ``last_gesture_silent``
+        raised means "I tapped and the screen never changed" — the one thing a
+        soft block looks like from the device. Adapters that do not verify never
+        raise the flag; for them this is a no-op.
+        """
+        if ok or not getattr(adapter, "last_gesture_silent", False):
+            return False
+        stats.silent += 1
+        if stats.silent < SILENT_GESTURES_MAX:
+            return False
+        matched = f"{stats.silent} gestures without a state change on screen"
+        log.warning("[warm] %s — stopping session as action_blocked", matched)
+        ledger.signal("action_blocked", matched)
+        stats.health = "action_blocked"
+        return True
 
     def check_health(xml: str) -> bool:
         sig = health.detect(adapter.platform, xml)
@@ -182,6 +211,8 @@ def run_session(
                 if adapter.like(xml):
                     ledger.record(policy.LIKE)
                     stats.likes += 1
+                elif silent_after(False):
+                    break
 
             # save
             if prop.save and ledger.allow(policy.SAVE) and human.profile.chance(prop.save):
@@ -189,6 +220,8 @@ def run_session(
                 if adapter.save(xml):
                     ledger.record(policy.SAVE)
                     stats.saves += 1
+                elif silent_after(False):
+                    break
 
             # profile visit, maybe follow
             if prop.visit and ledger.allow(policy.PROFILE_VISIT) and human.profile.chance(prop.visit):
@@ -205,6 +238,9 @@ def run_session(
                             ledger.record(policy.FOLLOW, author)
                             stats.follows += 1
                             human.pause(1.0)
+                        elif silent_after(False):
+                            adapter.back_to_feed()
+                            break
                     adapter.back_to_feed()
 
             # comment
@@ -217,6 +253,8 @@ def run_session(
                     # Only a text that really went through is consumed; anything
                     # else returns to the pool when its reservation expires.
                     stats.comments_used.append(text)
+                elif silent_after(False):
+                    break
                 cxml = adapter.dump()
                 if check_health(cxml):
                     break
