@@ -183,6 +183,12 @@ def _soft_smoke_check(skill: str, meta: dict, device: str, skills_dir: Path | No
 
 
 def main():
+    # every step and every GeeLark repair with a timestamp on stdout: the
+    # chronometer of a run (FARM_QUIET=1 to silence)
+    if os.environ.get("FARM_QUIET") != "1":
+        import logging
+
+        logging.basicConfig(level=logging.INFO, format="%(asctime)s %(message)s", datefmt="%H:%M:%S", stream=sys.stdout)
     parser = argparse.ArgumentParser()
     parser.add_argument("--skill", required=True)
     parser.add_argument("--workflow", default="")

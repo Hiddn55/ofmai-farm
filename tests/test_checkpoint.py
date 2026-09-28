@@ -109,3 +109,22 @@ def test_engine_skips_checkpoint_without_run_or_success():
     act = RecordedStepAction(dev, {"action": "checkpoint", "reason": "sms"}, 0, run_id=None)
     res = act.execute()
     assert res.success and res.data["resolution"] == "skipped"
+
+
+def test_a_gate_already_met_clears_itself_without_waking_anyone():
+    """The scripted step before the gate did the job: no alert, no wait."""
+    notified = []
+    outcome, states = _run(success={"screen_has": "birthday"}, check_success=lambda s: True,
+                           notify=lambda r, p: notified.append(r))
+    assert outcome.resolved and outcome.resolution == "auto"
+    assert notified == []
+    assert states == ["running"]
+
+
+def test_the_screen_is_read_every_ten_seconds_not_every_poll():
+    reads = []
+    outcome, _ = _run(success={"screen_has": "x"}, poll=2.0, success_every=10.0,
+                      check_success=lambda s: (reads.append(1) or True) and len(reads) >= 3,
+                      read_signal=_signals(*([None] * 30)))
+    assert outcome.resolution == "auto"
+    assert len(reads) == 3  # entry, +10 s, +20 s — not 11 polls

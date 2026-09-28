@@ -191,9 +191,14 @@ class Device:
             try:
                 r = self._run_once(args, timeout)
             except subprocess.TimeoutExpired:
-                # a frozen link: on GeeLark the expired login hangs every
-                # command, glogin included — only a reconnect revives it
-                if not repair or not repair(self.serial, "hang"):
+                # A frozen link: on GeeLark the expired login hangs every
+                # command, glogin included — only a reconnect revives it.
+                # But a slow command on a live link (uiautomator on a screen
+                # that never settles) is not a frozen link, and reconnecting
+                # on it is what put sierra-us "offline" for a minute at a
+                # time on 2026-09-22: ask the link first, repair only when it
+                # does not answer.
+                if not repair or self._link_answers() or not repair(self.serial, "hang"):
                     raise
                 r = self._run_once(args, timeout)
             expired = SESSION_EXPIRED in (r.stdout or "")
@@ -205,6 +210,14 @@ class Device:
             raise ADBError(args, 127, "adb executable not found on PATH") from e
         except subprocess.TimeoutExpired as e:
             raise ADBError(args, -1, f"timed out after {timeout}s") from e
+
+    def _link_answers(self, timeout: float = 5.0) -> bool:
+        """Whether the link still answers a trivial shell command."""
+        try:
+            r = self._run_once(["shell", "echo", "farm-probe"], timeout)
+        except subprocess.TimeoutExpired:
+            return False
+        return r.returncode == 0 and "farm-probe" in (r.stdout or "")
 
     def adb(self, *args, timeout=30) -> str:
         """Run an adb command, returning stripped stdout.
@@ -386,6 +399,14 @@ class Device:
     # Per-device portal HTTP port (set up via adb forward)
     _portal_ports: dict = {}  # serial → local_port
     _portal_failed: set = set()  # serials where portal is unavailable
+    # serial → monotonic time of the last full probe that found no Portal. A
+    # phone without the Portal app (every GeeLark persona phone) answered the
+    # HTTP probe and the two content queries with nothing, 2.1 s per dump,
+    # measured on sierra-us 2026-09-22 — as much as the uiautomator dump
+    # itself. Once a probe found nothing, the next PORTAL_RETRY_S of dumps go
+    # straight to uiautomator.
+    _portal_absent_at: dict = {}
+    PORTAL_RETRY_S = 600.0
 
     def _ensure_portal_forward(self, force=False) -> int | None:
         """Ensure ADB port forward for Portal HTTP. Returns local port or None."""
@@ -411,14 +432,29 @@ class Device:
             return None
 
     def dump_portal_json(self) -> dict | list | None:
-        """Fast UI state via Droidrun Portal HTTP (33ms) or content provider (1.2s)."""
+        """Fast UI state via Droidrun Portal HTTP (33ms) or content provider (1.2s).
+
+        None when the phone has no Portal — and then, for PORTAL_RETRY_S, None
+        at once without probing again.
+        """
         import urllib.request
 
+        absent_since = Device._portal_absent_at.get(self.serial)
+        if absent_since is not None and time.monotonic() - absent_since < Device.PORTAL_RETRY_S:
+            return None
+        tree = self._probe_portal(urllib.request)
+        if tree:
+            Device._portal_absent_at.pop(self.serial, None)
+        else:
+            Device._portal_absent_at[self.serial] = time.monotonic()
+        return tree
+
+    def _probe_portal(self, urllib_request) -> dict | list | None:
         # Try HTTP first (37x faster than content provider)
         port = self._ensure_portal_forward()
         if port:
             try:
-                req = urllib.request.urlopen(f"http://localhost:{port}/state", timeout=2)
+                req = urllib_request.urlopen(f"http://localhost:{port}/state", timeout=2)
                 data = json.loads(req.read())
                 if data.get("status") == "success":
                     tree = json.loads(data["result"]).get("a11y_tree")

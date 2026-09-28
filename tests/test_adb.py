@@ -197,7 +197,8 @@ def test_an_expired_geelark_login_is_repaired_and_the_command_replayed(monkeypat
     monkeypatch.setattr(Device, "session_repair", staticmethod(repair))
     assert Device("1.2.3.4:20056").adb("shell", "echo", "ok") == "ok"
     assert repaired_serials == [("1.2.3.4:20056", "hang" if hang_first else "expired")]
-    assert len(state["calls"]) == 2  # the failed call, then its replay
+    # the failed call, then its replay — and on a hang, the probe of the link in between
+    assert len(state["calls"]) == (3 if hang_first else 2)
 
 
 def test_without_a_repair_hook_a_hang_is_still_a_hard_failure(monkeypatch):
@@ -216,7 +217,7 @@ def test_a_failed_repair_does_not_loop(monkeypatch):
     monkeypatch.setattr(Device, "session_repair", staticmethod(lambda serial, reason: False))
     with pytest.raises(ADBError, match="timed out"):
         Device("1.2.3.4:20056").adb("shell", "echo", "ok")
-    assert len(state["calls"]) == 1
+    assert len(state["calls"]) == 2  # the hung call and the probe of the link — no replay
 
 
 def test_a_dropped_cloud_transport_is_repaired_too(monkeypatch):
@@ -246,3 +247,48 @@ def test_a_dropped_cloud_transport_is_repaired_too(monkeypatch):
     assert Device("1.2.3.4:20135").adb("shell", "echo", "ok") == "ok"
     assert state["calls"] == 2
     assert reasons == ["offline"]
+
+
+def test_a_slow_command_on_a_live_link_is_not_a_reason_to_reconnect(monkeypatch):
+    """A uiautomator dump that outlives its timeout while the link still answers
+    (a screen that never settles, two dumps at once) is a failed command, not a
+    dead link: reconnecting on it put sierra-us "offline" for a minute at a
+    time on 2026-09-22."""
+    from types import SimpleNamespace
+
+    from gitd.bots.common.adb import ADBError, Device
+
+    calls = []
+
+    def fake_run(argv, *a, **k):
+        calls.append(argv)
+        if "farm-probe" in argv:
+            return SimpleNamespace(returncode=0, stdout="farm-probe\n", stderr="")
+        raise subprocess.TimeoutExpired(argv, k.get("timeout", 1))
+
+    monkeypatch.setattr(subprocess, "run", fake_run)
+    repaired = []
+    monkeypatch.setattr(Device, "session_repair", staticmethod(lambda s, r: repaired.append(r) or True))
+    with pytest.raises(ADBError, match="timed out"):
+        Device("1.2.3.4:20056").adb("shell", "uiautomator", "dump")
+    assert repaired == []
+    assert [c[-1] for c in calls] == ["dump", "farm-probe"]
+
+
+def test_a_phone_without_portal_is_not_probed_again_for_a_while(monkeypatch):
+    """The Portal probe (HTTP + two content queries) cost 2.1 s per dump on a
+    GeeLark phone that has no Portal — as much as the dump itself."""
+    from gitd.bots.common.adb import Device
+
+    probes = []
+    monkeypatch.setattr(Device, "_probe_portal", lambda self, u: probes.append(1) and None)
+    Device._portal_absent_at.clear()
+    dev = Device("9.9.9.9:1")
+    assert dev.dump_portal_json() is None
+    assert dev.dump_portal_json() is None
+    assert dev.dump_portal_json() is None
+    assert len(probes) == 1
+    # …and probed again once the retry window has passed
+    Device._portal_absent_at["9.9.9.9:1"] -= Device.PORTAL_RETRY_S + 1
+    assert dev.dump_portal_json() is None
+    assert len(probes) == 2

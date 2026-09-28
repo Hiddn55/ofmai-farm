@@ -102,6 +102,24 @@ class Element:
         )
 
 
+@dataclass
+class _AnyOfElement(Element):
+    """An Element whose `text` may be any of `text_any`, tried in order."""
+
+    text_any: list[str] = field(default_factory=list)
+
+    def find(self, device: Device, xml: str | None = None) -> tuple[int, int] | None:
+        if xml is None:
+            xml = device.dump_xml()
+        for label in self.text_any:
+            bounds = device.find_bounds(xml, text=label)
+            if bounds:
+                return device.bounds_center(bounds)
+        if not any((self.text, self.resource_id, self.content_desc, self.class_name, self.x is not None)):
+            return None
+        return super().find(device, xml)
+
+
 # ── Action ────────────────────────────────────────────────────────────────────
 
 
@@ -112,6 +130,14 @@ class Action(ABC):
     description: str = ""
     max_retries: int = 2
     retry_delay: float = 1.0
+    # The engine reads the screen ONCE after each step (popups, guard) and hands
+    # that tree to the next step as `prefetched_xml`: a locator found in it is
+    # tapped without a second dump — 2 s on a cloud phone, per step. A locator
+    # missing from it re-reads the screen. A step that read the screen itself
+    # after its gesture leaves the tree in `last_xml` for the engine.
+    prefetched_xml: str | None = None
+    last_xml: str | None = None
+    is_checkpoint: bool = False
 
     def __init__(self, device: Device, elements: dict[str, Element] | None = None):
         self.device = device
@@ -270,11 +296,15 @@ class Workflow:
         dev.adb("shell", "monkey", "-p", self.app_package, "-c", "android.intent.category.LAUNCHER", "1")
         time.sleep(self.engine.launch_settle)
 
-    def _dismiss_popups(self, step_name: str = "") -> bool:
-        """Phase 4+: Run popup detectors. Returns True if something was dismissed."""
+    def _dismiss_popups(self, step_name: str = "", xml: str | None = None) -> bool:
+        """Phase 4+: Run popup detectors. Returns True if something was dismissed.
+
+        ``xml`` is a tree already read after the step; None reads the screen.
+        """
         if self.engine.skip_popup_detect:
             return False
-        xml = self.device.dump_xml()
+        if xml is None:
+            xml = self.device.dump_xml()
         if not xml:
             return False
         if not hasattr(self.device, "dismiss_popups"):
@@ -317,9 +347,13 @@ class Workflow:
             self._launch_app()
             self._dismiss_popups()
 
-        # Execute steps with popup detection between each
+        # Execute steps with popup detection between each — on ONE reading of
+        # the screen per step, shared with the next step's locator search.
         steps = self.steps()
+        fresh: str | None = None
         for action in steps:
+            action.prefetched_xml = fresh
+            fresh = None
             log.info(f"[{self.name}] Running: {action.name}")
             result = action.run()
             self.results.append(result)
@@ -335,8 +369,16 @@ class Workflow:
                     },
                     duration_ms=(time.time() - t0) * 1000,
                 )
-            # Popup detection after each step
-            self._dismiss_popups(action.name)
+            if action.is_checkpoint:
+                # A human (or a scripted gate) just left the screen the way the
+                # next step expects it: a generic "cancel" found there is not a
+                # popup — it closed the birthday picker on 2026-09-22.
+                continue
+            # Popup detection after each step, on the tree the step read after
+            # its gesture when it has one, else on one fresh reading
+            xml = action.last_xml or self.device.dump_xml()
+            if not self._dismiss_popups(action.name, xml):
+                fresh = xml or None
             if cfg.step_settle > 0:
                 time.sleep(cfg.step_settle)
 
@@ -362,6 +404,7 @@ class RecordedStepAction(Action):
         self.run_id = run_id  # SkillRun id — lets a checkpoint step signal/poll its run
         self.name = f"step_{step_index + 1}_{step.get('action', 'unknown')}"
         self.description = step.get("description", step.get("action", ""))
+        self.is_checkpoint = step.get("action") == "checkpoint"
 
     def execute(self) -> ActionResult:
         step = self._step
@@ -373,34 +416,44 @@ class RecordedStepAction(Action):
                 if _device_is_ios(self.device) and hasattr(self.device, "launch_app"):
                     self.device.launch_app(pkg)
                 else:
-                    self.device.adb(
-                        "shell",
-                        "am",
-                        "start",
-                        "-a",
-                        "android.intent.action.MAIN",
-                        "-c",
-                        "android.intent.category.LAUNCHER",
-                        pkg,
-                    )
-        elif action == "tap" and any(step.get(k) for k in ("text", "resource_id", "content_desc", "class_name")):
+                    # `am start -a MAIN -c LAUNCHER <pkg>` answers "unable to
+                    # resolve Intent" on a GeeLark phone (sierra-us,
+                    # 2026-09-23); the launcher category through monkey is
+                    # what the engine's own startup uses, and it works
+                    self.device.adb("shell", "monkey", "-p", pkg, "-c", "android.intent.category.LAUNCHER", "1")
+        elif action == "tap" and any(step.get(k) for k in ("text", "text_any", "resource_id", "content_desc", "class_name")):
             # Locator-based tap — re-find the element on each run so the skill
             # survives minor UI shifts instead of hard-coding pixel coords.
             # Falls back to captured x/y if the locator no longer resolves.
-            el = Element(
+            # `text_any` lists the labels one button has worn across app
+            # builds (Instagram's first screen: "Get started" on the 2026-09
+            # build, "Create new account" before): the first one on screen wins.
+            el = _AnyOfElement(
                 name="tap",
                 text=step.get("text"),
                 resource_id=step.get("resource_id"),
                 content_desc=step.get("content_desc"),
                 class_name=step.get("class_name"),
+                text_any=list(step.get("text_any") or []),
             )
-            coord = el.find(self.device)
+            # the tree the engine read after the previous step first; a
+            # locator missing from it (the screen moved on) re-reads the screen,
+            # and keeps reading for `wait_s` (default 8 s): a human waits for
+            # the button to appear before pressing it, a skill must too
+            # (sierra-us, 2026-09-23: "Create new account" missed by 2 s)
+            coord = el.find(self.device, self.prefetched_xml) if self.prefetched_xml else None
+            deadline = time.monotonic() + float(step.get("wait_s", 8))
+            while coord is None:
+                coord = el.find(self.device)
+                if coord is not None or time.monotonic() >= deadline:
+                    break
+                time.sleep(1.5)
             if coord:
                 self.device.tap(coord[0], coord[1])
             elif step.get("x") is not None and step.get("y") is not None:
                 self.device.tap(step["x"], step["y"])
             else:
-                locator = step.get("text") or step.get("resource_id") or step.get("content_desc")
+                locator = step.get("text") or step.get("resource_id") or step.get("content_desc") or step.get("text_any")
                 return ActionResult(success=False, error=f"tap locator not found: {locator}")
         elif action == "tap" and step.get("element_idx") is not None:
             import re
@@ -493,11 +546,105 @@ class RecordedStepAction(Action):
         elif action == "checkpoint":
             # Human-in-the-loop gate — blocks here; returns without the settle sleep.
             return self._run_checkpoint(step)
+        elif action == "type_secret":
+            failed = self._type_secret(step)
+            if failed is not None:  # a failed ActionResult is falsy: test identity, not truth
+                return failed
+        elif action == "date_wheel":
+            failed = self._fill_date_wheel(step)
+            if failed is not None:
+                return failed
         else:
             log.warning(f"Unknown recorded action: {action}")
 
         time.sleep(1.0)  # settle time between steps
         return ActionResult(success=True, data={"action": action})
+
+    # ── Scripted gates (what a human used to type at a checkpoint) ─────
+
+    def _type_secret(self, step: dict) -> ActionResult | None:
+        """Type a Keychain secret (``service``: ``ofmai-social-instagram-sierra``)
+        into the focused field. The value never reaches a log, a result or an
+        exception message (R9). None on success, the failure otherwise."""
+        from gitd.farm.bridge import _keychain
+
+        service = step.get("service", "")
+        secret = _keychain(service).strip() if service else ""
+        if not secret:
+            return ActionResult(success=False, error=f"no Keychain entry {service!r} on this machine (R9)")
+        if _device_is_ios(self.device) and hasattr(self.device, "type_text"):
+            self.device.type_text(secret)
+        elif secret.isascii():
+            from gitd.bots.common.adb import input_text_arg
+
+            self.device.adb("shell", "input", "text", input_text_arg(secret))
+        else:
+            self.device.type_unicode(secret)
+        return None
+
+    _DATE_INPUT_ID = "numberpicker_input"
+
+    def _fill_date_wheel(self, step: dict) -> ActionResult | None:
+        """Fill Android's ``Set date`` dialog (three NumberPickers) with
+        ``date`` (YYYY-MM-DD) by TYPING: a tap on a wheel value makes it an
+        editable field (screens-instagram.md screen 6), so each value is typed
+        instead of scrolled. Year, then day, then month (its three letters);
+        the screen is re-read before each one because the dialog re-centres
+        when the keyboard opens. Ends on the dialog's SET button; the next
+        recorded step taps Next."""
+        import calendar
+
+        date = step.get("date", "")
+        try:
+            year, month, day = (int(x) for x in date.split("-"))
+            month_name = calendar.month_abbr[month]
+        except (ValueError, IndexError):
+            return ActionResult(success=False, error=f"date_wheel: bad date {date!r} (YYYY-MM-DD)")
+        wanted = {"year": str(year), "day": str(day), "month": month_name}
+        for kind in ("year", "day", "month"):
+            xml = self.device.dump_xml() or ""
+            field = self._date_field(xml, kind)
+            if field is None:
+                return ActionResult(success=False, error=f"date_wheel: no {kind} wheel on screen")
+            current, (cx, cy) = field
+            self.device.tap(cx, cy, delay=0.6)
+            self.device.adb("shell", "input", "keyevent", "KEYCODE_MOVE_END")
+            dels = " ".join(["KEYCODE_DEL"] * (len(current) + 2))
+            self.device.adb("shell", "input", "keyevent", *dels.split())
+            self.device.adb("shell", "input", "text", wanted[kind])
+            time.sleep(0.4)
+        # SET may sit under the keyboard: Back closes the keyboard, not the dialog
+        for attempt in range(2):
+            xml = self.device.dump_xml() or ""
+            coord = self._button(xml, ("SET", "Set", "OK", "Done"))
+            if coord:
+                self.device.tap(*coord, delay=0.8)
+                return None
+            self.device.back(delay=0.8)
+        return ActionResult(success=False, error="date_wheel: SET button not found after typing the date")
+
+    def _date_field(self, xml: str, kind: str) -> tuple[str, tuple[int, int]] | None:
+        """(current text, centre) of the wheel of ``kind`` in a Set date dialog."""
+        for node in self.device.nodes(xml):
+            if self._DATE_INPUT_ID not in self.device.node_rid(node):
+                continue
+            text = self.device.node_text(node).strip()
+            b = self.device.node_bounds(node)
+            if not b:
+                continue
+            is_year = text.isdigit() and len(text) == 4
+            is_day = text.isdigit() and len(text) <= 2
+            is_month = bool(text) and not text.isdigit()
+            if (kind == "year" and is_year) or (kind == "day" and is_day) or (kind == "month" and is_month):
+                return text, self.device.node_center(b)
+        return None
+
+    def _button(self, xml: str, labels: tuple[str, ...]) -> tuple[int, int] | None:
+        for label in labels:
+            bounds = self.device.find_bounds(xml, text=label)
+            if bounds:
+                return self.device.bounds_center(bounds)
+        return None
 
     # ── Checkpoint (human-in-the-loop) ────────────────────────────────
     def _run_checkpoint(self, step: dict) -> ActionResult:
@@ -627,7 +774,7 @@ class RecordedWorkflow(Workflow):
         for i, step in enumerate(self._raw_steps):
             # Resolve parameter placeholders
             resolved = dict(step)
-            for field in ("text", "package", "description", "goal", "prompt"):
+            for field in ("text", "package", "description", "goal", "prompt", "service", "date"):
                 if isinstance(resolved.get(field), str):
                     resolved[field] = self._substitute(resolved[field])
             # …and inside a checkpoint's success condition. A gate that waits for

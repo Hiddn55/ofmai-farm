@@ -6,13 +6,23 @@
     "goal": "Day 7 of the phone, the last of the four accounts. Thirteen screens, all seen on GeeLark explorer-us (Reddit 2026.35.0, 2026-09-16, docs/social/screens-reddit.md)",
     "verified": true
   },
-  { "action": "wait", "seconds": 8, "description": "Cold start", "verified": true },
-  { "action": "tap", "text": "Get Started", "description": "Screen 1 — 'The most real place on the internet'", "verified": true },
+  {
+    "action": "wait",
+    "seconds": 8,
+    "description": "Cold start",
+    "verified": true
+  },
   {
     "action": "tap",
-    "text": "Continue with email",
-    "description": "Screen 2 — the Get Started sheet. Google and phone number sit above it: never those",
+    "text": "Get Started",
+    "description": "Screen 1 — 'The most real place on the internet'",
     "verified": true
+  },
+  {
+    "action": "tap",
+    "description": "Screen 2 — the Get Started sheet: the email button is labelled by its content-desc (sierra-us, 2026-09-22). Google and phone number sit above it: never those",
+    "verified": true,
+    "content_desc": "Continue with email"
   },
   {
     "action": "tap",
@@ -20,13 +30,25 @@
     "description": "Screen 3 — 'Hi new friend, welcome to Reddit': the only field is the email",
     "verified": true
   },
-  { "action": "type", "text": "{email}", "description": "The character's own mailbox (account-creation.md §4 bis: firstname.lastname + birth year)", "verified": true },
-  { "action": "tap", "text": "Continue", "description": "Submit the email", "verified": true },
+  {
+    "action": "type",
+    "text": "{email}",
+    "description": "The character's own mailbox (account-creation.md §4 bis: firstname.lastname + birth year)",
+    "verified": true
+  },
+  {
+    "action": "tap",
+    "text": "Continue",
+    "description": "Submit the email",
+    "verified": true
+  },
   {
     "action": "checkpoint",
     "reason": "email",
     "prompt": "Screen 4 — 'Verify your email'. Reddit sent a 6-digit CODE (not a link) to {email}. Read it in the character's mailbox — the mailbox password lives in the Keychain, it is never a parameter of this run (R9) — type it in the single code field with POST /api/phone/type and tap Continue ('Resend' appears after 30 s). Then resume.",
-    "success": { "screen_has": "Create your username" },
+    "success": {
+      "screen_has": "Create your username"
+    },
     "timeout_s": 0,
     "description": "Email verification by code (account-creation.md §4.3)",
     "verified": true
@@ -35,18 +57,41 @@
     "action": "checkpoint",
     "reason": "generic",
     "prompt": "Screen 5 — 'Create your username'. The field arrives PRE-FILLED with a random username (not derived from the email, unlike Instagram): the (x) at the right end of the field clears it. Clear it, type {handle} from the persona sheet; if it is taken, use fallback handle 2, then 3, and update the sheet. Tap Continue. Then resume.",
-    "success": { "screen_has": "Set a password" },
+    "success": {
+      "screen_has": "Set a password"
+    },
     "timeout_s": 0,
     "description": "Username — the field arrives pre-filled",
     "verified": true
   },
   {
+    "action": "tap",
+    "class_name": "android.widget.EditText",
+    "description": "Screen 6 — 'Set a password': the password field",
+    "verified": false
+  },
+  {
+    "action": "type_secret",
+    "service": "ofmai-social-reddit-{slug}",
+    "description": "The Reddit password, read from the Keychain by the step itself — never a parameter, never logged (R9)",
+    "verified": false
+  },
+  {
+    "action": "tap",
+    "text": "Continue",
+    "description": "Submit the password; the passkey dialog and the notification permission that follow are handled by the popup detectors",
+    "verified": false
+  },
+  {
     "action": "checkpoint",
     "reason": "login",
-    "prompt": "Screen 6 — 'Set a password'. Type the Reddit password for {handle} on the device: read it from the Keychain (ofmai-social-reddit-<slug>) and type it with POST /api/phone/type; it is never a parameter of this run (R9). Tap Continue. A 'Can't create passkey' dialog (expected on a cloud phone: no Google account, no screen lock) and the Android notifications permission follow — both are dismissed for you (OK, then Allow: get_notifications reads the codes there). Then resume.",
+    "prompt": "Screen 6 — 'Set a password' is still on screen: the scripted password step did not go through. Screen 6 — 'Set a password'. Type the Reddit password for {handle} on the device: read it from the Keychain (ofmai-social-reddit-<slug>) and type it with POST /api/phone/type; it is never a parameter of this run (R9). Tap Continue. A 'Can't create passkey' dialog (expected on a cloud phone: no Google account, no screen lock) and the Android notifications permission follow — both are dismissed for you (OK, then Allow: get_notifications reads the codes there). Then resume.",
     "timeout_s": 0,
-    "description": "Password — typed by a human; passkey dialog and notification permission handled by the popup detectors",
-    "verified": true
+    "description": "Password — self-clearing when the scripted step went through",
+    "verified": true,
+    "success": {
+      "screen_has": "About you"
+    }
   },
   {
     "action": "tap",
@@ -66,14 +111,31 @@
     "description": "Eight digits, no separator (06141997 for June 14, 1997) — the persona sheet's birthday, 18+ (R2)",
     "verified": true
   },
-  { "action": "tap", "text": "OK", "description": "Close the date picker", "verified": true },
-  { "action": "tap", "text": "Continue", "description": "Submit the birthday", "verified": true },
-  { "action": "tap", "text": "Yes, Confirm", "description": "Screen 10 — the 'Confirm your birthday?' sheet", "verified": true },
+  {
+    "action": "tap",
+    "text": "OK",
+    "description": "Close the date picker",
+    "verified": true
+  },
+  {
+    "action": "tap",
+    "text": "Continue",
+    "description": "Submit the birthday",
+    "verified": true
+  },
+  {
+    "action": "tap",
+    "text": "Yes, Confirm",
+    "description": "Screen 10 — the 'Confirm your birthday?' sheet",
+    "verified": true
+  },
   {
     "action": "checkpoint",
     "reason": "generic",
     "prompt": "Screens 11-13 — 'About you' (gender), 'Choose your interests' (12 tiles, 3x4) and 'Customize your feed'. Pick the persona sheet's gender, then 3 to 5 tiles from {niche}, then Continue on each screen. That is consumption, not a follow — do not join anything and do not follow anyone (R16). Continue lands on the Home feed. Then resume.",
-    "success": { "screen_has": "Home" },
+    "success": {
+      "screen_has": "Home"
+    },
     "timeout_s": 0,
     "description": "Onboarding: gender, interests, feed",
     "verified": true
@@ -86,12 +148,19 @@
     "description": "The two adult-content settings and the profile (account-creation.md §6.4)",
     "verified": false
   },
-  { "action": "tap", "text": "You", "description": "The profile tab of the bottom bar", "verified": true },
+  {
+    "action": "tap",
+    "text": "You",
+    "description": "The profile tab of the bottom bar",
+    "verified": true
+  },
   {
     "action": "checkpoint",
     "reason": "generic",
     "prompt": "Last look on the You tab: the profile shows u/{handle}, the bio and the avatar, both adult-content settings are on, and there is no link anywhere. Register it on the Mac mini the same day — accounts add reddit @{handle} --device <GeeLark profile> --tz <persona tz> --created-on <today> — then resume to close the run. The `script` app of this character (reddit.com/prefs/apps) is a separate human step at day 15 or later, never today.",
-    "success": { "screen_has": "{handle}" },
+    "success": {
+      "screen_has": "{handle}"
+    },
     "timeout_s": 0,
     "description": "The run ends on the You tab showing {handle}",
     "verified": true

@@ -71,6 +71,11 @@ ALLOWED_ACTIONS: frozenset[str] = frozenset(
         "launch_intent",
         "checkpoint",
         "wait",
+        # scripted gates (base.RecordedStepAction): the password is read from
+        # the Keychain by the step itself, never a parameter; the birthday is
+        # typed into the Set date dialog
+        "type_secret",
+        "date_wheel",
     }
 )
 
@@ -212,6 +217,8 @@ def _strings_of(step: dict) -> list[tuple[str, str]]:
     for key, value in step.items():
         if isinstance(value, str):
             out.append((key, value))
+        elif isinstance(value, list):
+            out.extend((f"{key}[{i}]", v) for i, v in enumerate(value) if isinstance(v, str))
         elif isinstance(value, dict):
             for sub, sub_value in value.items():
                 if isinstance(sub_value, str):
@@ -271,10 +278,20 @@ def validate_steps(steps: list[dict], platform: str) -> list[str]:
                 problems.append(f"{where}: provider name {hit.group(0)!r} in typed text (R10)")
 
         if action == "tap":
-            if not any(step.get(k) for k in ("text", "resource_id", "content_desc", "class_name")):
+            if not any(step.get(k) for k in ("text", "text_any", "resource_id", "content_desc", "class_name")):
                 problems.append(f"{where}: tap without a locator")
             if step.get("x") is not None or step.get("y") is not None:
                 problems.append(f"{where}: tap falls back to coordinates — locators only (R34)")
+
+        if action == "type_secret":
+            service = step.get("service", "")
+            if not service.startswith("ofmai-social-") or "{slug}" not in service:
+                problems.append(
+                    f"{where}: type_secret service {service!r} — expected ofmai-social-<platform>-{{slug}} (R9)"
+                )
+
+        if action == "date_wheel" and "{birthday}" not in step.get("date", ""):
+            problems.append(f"{where}: date_wheel must type {{birthday}} of the persona sheet (R2)")
 
         if action == "checkpoint":
             reason = step.get("reason")
@@ -328,6 +345,10 @@ def validate_params(params: dict[str, Any], platform: str) -> list[str]:
 
     if not params.get("handle"):
         problems.append(f"{platform}: no handle — the final gate checks the profile screen for it")
+    if any(step.get("action") == "type_secret" for step in load_steps(platform)) and not re.fullmatch(
+        r"[a-z][a-z0-9-]{1,30}", str(params.get("slug", ""))
+    ):
+        problems.append(f"{platform}: no slug — the password step reads ofmai-social-{platform}-<slug> from the Keychain")
 
     return problems
 

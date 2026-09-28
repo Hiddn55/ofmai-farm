@@ -2,7 +2,7 @@
 
 > **Nature** : reference
 > **Statut** : en vigueur — vagues 1 et 2 construites le 2026-09-15. Existent : côté ferme `gitd/farm/*.py`, les skills `ofmai_{instagram,tiktok,x,reddit}` et `ofmai_signup_*`, le pont et les règles collectives (390 tests) ; côté OFMAI `lib/social/*`, `app/api/farm/*`, `app/api/admin/social/*`, les six fiches persona et le schéma de la banque (350 tests). Restent à faire : la vérification des sélecteurs sur un appareil (E4, aucun `tested_on` rempli), les pages publiques, le comment-to-DM, et les trois tâches de cibles radar E3.7 / E7.5 / E7.6.
-> **À jour au** : 2026-09-15
+> **À jour au** : 2026-09-23 — **commencer par `ETAT.md`** (état, ce qui marche, ce qui casse, reprise à froid)
 > **Répond à** : quel fichier ouvrir pour construire, puis exploiter, la ferme de personnages (téléphones virtuels, chauffe, publication, pont ferme ↔ OFMAI, santé, attribution)
 > **Code concerné** : fork ofmai-farm `gitd/farm/`, `gitd/skills/ofmai_*` ; OFMAI `app/api/farm/` (à créer), `app/api/admin/social/` (à créer), `lib/social/` (à créer), `prisma/schema.prisma`, `app/api/attribution/route.ts`, `.claude/workflows/growth-*.js` (à créer)
 
@@ -10,6 +10,7 @@
 
 ## Ordre de lecture
 
+- **Pour reprendre le travail** (conversation neuve, zéro contexte) : `ETAT.md` d'abord, toujours — il dit où on en est au jour près, les commandes, les secrets, et les règles apprises à la dure.
 - **Pour construire** : `rules.md` → `architecture.md` → `bridge-ofmai-farm.md` → `content-pipeline.md` → `warming-policy.md` → `publishing.md` → `health-canaries.md` → `build-plan.md`.
 - **Pour exploiter** : `infrastructure-geelark-proxies.md` → `account-creation.md` → `personas.md` → `metrics-attribution.md`, puis `architecture.md` §9 (qui regarde quoi, quand).
 
@@ -17,6 +18,7 @@
 
 | Fichier | Répond à | Statut |
 |---|---|---|
+| `ETAT.md` | **le point d'entrée** : état du projet (fait / pas bon / reste), reprise à froid, règles apprises ; réécrit à chaque séance | **à jour au 2026-09-23** |
 | `rules.md` | les 36 règles absolues (personnages synthétiques, divulgation IA 3 sur 6, SFW/NSFW par host et par plateforme, comptes, texte publié, quotas et rythme, réseau, liens, humain dans la boucle, kill-switches et santé collective, médias et code, exploration des écrans sur le seul profil explorateur), pourquoi, et ce que le code garantit ou non | en vigueur |
 | `architecture.md` | composants, flux de bout en bout, processus du Mac mini, ports, secrets (noms canoniques du Trousseau), pannes et reprise, exploitation quotidienne | à vérifier |
 | `infrastructure-geelark-proxies.md` | monter et maintenir un téléphone virtuel par personnage : compte, profil, l'unique adresse statique posée une fois pour toutes, ADB, les deux profils sans personnage (observateur pour les canaris, explorateur sacrificiel pour le relevé des sélecteurs), coûts, pannes | à vérifier |

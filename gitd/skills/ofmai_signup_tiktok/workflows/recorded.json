@@ -65,12 +65,33 @@
     "verified": true
   },
   {
+    "action": "tap",
+    "class_name": "android.widget.EditText",
+    "description": "'Create password': the password field",
+    "verified": false
+  },
+  {
+    "action": "type_secret",
+    "service": "ofmai-social-tiktok-{slug}",
+    "description": "The TikTok password, read from the Keychain by the step itself — never a parameter, never logged (R9)",
+    "verified": false
+  },
+  {
+    "action": "tap",
+    "text": "Next",
+    "description": "Submit the password",
+    "verified": false
+  },
+  {
     "action": "checkpoint",
     "reason": "login",
-    "prompt": "Type the TikTok password for {handle} on the device. Read it from the Keychain (ofmai-social-tiktok-<slug>) and type it with POST /api/phone/type; it is never a parameter of this run (R9). Tap Next, then resume.",
+    "prompt": "'Create password' is still on screen: the scripted password step did not go through. Type the TikTok password for {handle} on the device. Read it from the Keychain (ofmai-social-tiktok-<slug>) and type it with POST /api/phone/type; it is never a parameter of this run (R9). Tap Next, then resume.",
     "timeout_s": 0,
-    "description": "Password — typed by a human",
-    "verified": true
+    "description": "Password — self-clearing when the scripted step went through",
+    "verified": true,
+    "success": {
+      "screen_has": "nickname"
+    }
   },
   {
     "action": "checkpoint",

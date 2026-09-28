@@ -14,9 +14,12 @@
   },
   {
     "action": "tap",
-    "text": "Create new account",
-    "description": "Screen 1 — bottom of the login screen",
-    "verified": true
+    "description": "Screen 1 — 'Join Instagram' welcome (build of 2026-09, sierra-us): 'Get started'; older builds: 'Create new account' at the bottom of the login screen",
+    "verified": true,
+    "text_any": [
+      "Get started",
+      "Create new account"
+    ]
   },
   {
     "action": "tap",
@@ -54,25 +57,55 @@
     "verified": true
   },
   {
+    "action": "tap",
+    "class_name": "android.widget.EditText",
+    "description": "Screen 5 — 'Create a password': the password field ('Remember login info' stays ticked)",
+    "verified": false
+  },
+  {
+    "action": "type_secret",
+    "service": "ofmai-social-instagram-{slug}",
+    "description": "The Instagram password, read from the Keychain by the step itself — never a parameter, never logged (R9)",
+    "verified": false
+  },
+  {
+    "action": "tap",
+    "text": "Next",
+    "description": "Submit the password",
+    "verified": false
+  },
+  {
     "action": "checkpoint",
     "reason": "login",
-    "prompt": "Screen 5 — 'Create a password' ('Remember login info' is ticked by default, leave it). Type the Instagram password for {handle}: read it from the Keychain (ofmai-social-instagram-<slug>) and type it with POST /api/phone/type; it is never a parameter of this run (R9). Tap Next. Then resume.",
+    "prompt": "Screen 5 — 'Create a password' is still on screen: the scripted password step did not go through. Type the Instagram password for {handle} by hand — read it from the Keychain (ofmai-social-instagram-<slug>) and type it with POST /api/phone/type; it is never a parameter of this run (R9). Tap Next. Then resume.",
     "success": {
       "screen_has": "birthday"
     },
     "timeout_s": 0,
-    "description": "Password — typed by a human, never recorded anywhere in this run",
+    "description": "Password — self-clearing when the scripted step landed on the birthday screen",
     "verified": true
+  },
+  {
+    "action": "date_wheel",
+    "date": "{birthday}",
+    "description": "Screen 6 — 'What's your birthday?': the Set date dialog opens on its own; year, day and month are TYPED (a tap makes a wheel value editable), then SET",
+    "verified": false
+  },
+  {
+    "action": "tap",
+    "text": "Next",
+    "description": "The computed age shows in the field; continue",
+    "verified": false
   },
   {
     "action": "checkpoint",
     "reason": "generic",
-    "prompt": "Screen 6 — 'What's your birthday?': the 'Set date' dialog opens on its own. ONE TAP ON A WHEEL VALUE MAKES IT EDITABLE — never scroll: tap the year and type it, tap the day and type it, tap the month, MOVE_END then 5x DEL, and type its three letters (Jun). SET, then Next: the computed age shows in the field. Birthday {birthday}, 18+ (R2). Then resume.",
+    "prompt": "Screen 6 — 'What's your birthday?' is still on screen: the scripted date step did not go through. The 'Set date' dialog: ONE TAP ON A WHEEL VALUE MAKES IT EDITABLE — never scroll: tap the year and type it, tap the day and type it, tap the month, MOVE_END then 5x DEL, and type its three letters. SET, then Next. Birthday {birthday}, 18+ (R2). Then resume.",
     "success": {
       "screen_has": "name"
     },
     "timeout_s": 0,
-    "description": "Birthday — the wheel values are typed, not scrolled (verified)",
+    "description": "Birthday — self-clearing when the scripted step landed on the name screen",
     "verified": true
   },
   {

@@ -44,6 +44,7 @@ def run_checkpoint(
     now: Callable[[], float],
     sleep: Callable[[float], None],
     poll: float = 2.0,
+    success_every: float = 10.0,
 ) -> CheckpointOutcome:
     """Block until the checkpoint is cleared, auto-detected, aborted, or times out.
 
@@ -53,11 +54,25 @@ def run_checkpoint(
     """
     reason = reason if reason in VALID_REASONS else "generic"
     entered = now()
-    set_state("awaiting_human", {"reason": reason, "prompt": prompt, "success": success or {}, "timeout_s": timeout_s})
+    # The screen is read every `success_every` seconds, not every poll: a dump
+    # costs 2 s of the phone's time and collides with whatever a human types
+    # on that screen (two dumps at once hung the link on 2026-09-22).
+    polls_between_checks = max(1, int(round(success_every / poll))) if poll > 0 else 1
+    since_check = 0
+    # A gate whose success condition is already on screen — the scripted step
+    # before it did the job — clears itself without waking a human up. A
+    # manual signal already posted still wins, as in the loop.
+    first_sig = read_signal()
+    checkpoint = {"reason": reason, "prompt": prompt, "success": success or {}, "timeout_s": timeout_s}
+    if first_sig not in ("resume", "abort") and success and check_success(success):
+        set_state("running", checkpoint)  # recorded, never awaited
+        return CheckpointOutcome(True, "auto", data={"checkpoint": reason})
+    set_state("awaiting_human", checkpoint)
     notify(reason, prompt)
 
     while True:
-        sig = read_signal()
+        sig = first_sig if first_sig is not None else read_signal()
+        first_sig = None
         if sig == "abort":
             set_state("aborted", None)
             return CheckpointOutcome(False, "aborted", f"checkpoint aborted by human ({reason})")
@@ -65,9 +80,12 @@ def run_checkpoint(
             set_state("running", None)
             return CheckpointOutcome(True, "human", data={"checkpoint": reason})
 
-        if success and check_success(success):
-            set_state("running", None)
-            return CheckpointOutcome(True, "auto", data={"checkpoint": reason})
+        since_check += 1
+        if success and since_check >= polls_between_checks:
+            since_check = 0
+            if check_success(success):
+                set_state("running", None)
+                return CheckpointOutcome(True, "auto", data={"checkpoint": reason})
 
         if timeout_s and (now() - entered) >= timeout_s:
             set_state("timed_out", None)

@@ -26,6 +26,7 @@ exports:
     - name: recorded
       description: TikTok signup by the character's own US line, human gates
       params:
+        slug: { type: string, required: true, description: "persona slug (sierra): names the Keychain entry ofmai-social-tiktok-<slug> the password step reads (R9)" }
         phone: { type: string, required: true, description: "the character's own US line, digits only, never shared (account-creation.md §4 ter)" }
         email: { type: string, required: true, description: "the character's own mailbox, only if TikTok asks for a recovery address" }
         handle: { type: string, required: true }

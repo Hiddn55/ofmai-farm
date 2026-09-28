@@ -104,7 +104,7 @@ def test_no_tap_falls_back_to_coordinates(platform):
     for step in signup.load_steps(platform):
         if step.get("action") == "tap":
             assert step.get("x") is None and step.get("y") is None
-            assert any(step.get(k) for k in ("text", "resource_id", "content_desc", "class_name"))
+            assert any(step.get(k) for k in ("text", "text_any", "resource_id", "content_desc", "class_name"))
 
 
 # The platforms whose signup was walked on a device (docs/social/screens-*.md):
@@ -211,6 +211,7 @@ def test_validator_refuses_a_list_without_a_login_gate():
 GOOD_PARAMS = {
     "email": "sierra.cole.ai@gmail.com",
     "handle": "sierra.cole",
+    "slug": "sierra",
     "name": "Sierra Cole",
     "birthday": "2001-03-14",
     "bio_line1": "sierra, 25, la",
@@ -422,6 +423,14 @@ class ReplayDevice:
     def find_bounds(self, xml, **kw):
         return "[0,0][10,10]"
 
+    # the tree readers of a real Device, on this fixed screen
+    def __getattr__(self, name):
+        from gitd.bots.common.adb import Device
+
+        if name in ("nodes", "node_text", "node_rid", "node_bounds", "node_center"):
+            return lambda *a, **kw: getattr(Device, name)(self, *a, **kw)
+        raise AttributeError(name)
+
     def bounds_center(self, bounds):
         return (5, 5)
 
@@ -444,6 +453,12 @@ FRIENDLY_SCREEN = (
     "<node text='Create a password'/><node text='I agree'/>"
     "<node text='Create your username'/><node text='Set a password'/>"
     "<node text='What is your birthday'/><node text='What is your name'/>"
+    "<node text='About you'/><node text='Create nickname'/>"
+    # the Set date dialog the birthday step types into
+    '<node text="Jun" resource-id="android:id/numberpicker_input" bounds="[150,450][290,530]"/>'
+    '<node text="14" resource-id="android:id/numberpicker_input" bounds="[300,450][400,530]"/>'
+    '<node text="1997" resource-id="android:id/numberpicker_input" bounds="[420,450][560,530]"/>'
+    '<node text="SET" bounds="[440,650][540,700]"/>'
     "<node text='Home'/>"
     "<node text='sierra.cole'/>"
     "</hierarchy>"
@@ -451,7 +466,10 @@ FRIENDLY_SCREEN = (
 
 
 @pytest.mark.parametrize("platform", signup.PLATFORMS)
-def test_the_whole_list_replays_without_a_phone(platform):
+def test_the_whole_list_replays_without_a_phone(platform, monkeypatch):
+    import gitd.farm.bridge as bridge
+
+    monkeypatch.setattr(bridge, "_keychain", lambda service: "replay-password")  # never the Mac's Keychain
     dev = ReplayDevice(FRIENDLY_SCREEN)
     steps = signup.load_steps(platform)
     workflow = signup.GuardedRecordedWorkflow(
@@ -556,3 +574,29 @@ def test_a_checkpoint_without_a_webhook_is_not_delayed_by_discord(monkeypatch):
     action = RecordedStepAction(_device(), {"action": "checkpoint", "reason": "sms"}, 0, run_id=None)
     result = action.execute()
     assert result.success and result.data["resolution"] == "skipped"
+
+
+def test_the_password_and_birthday_steps_are_scripted_not_typed_by_a_human():
+    """R9 kept: the password is read from the Keychain by the step, by slug,
+    and the gates that follow only fire when the scripted step did not land."""
+    for platform in ("instagram", "reddit", "tiktok"):
+        steps = signup.load_steps(platform)
+        secret = [s for s in steps if s.get("action") == "type_secret"]
+        assert len(secret) == 1, platform
+        assert secret[0]["service"] == f"ofmai-social-{platform}-{{slug}}"
+        login = next(s for s in steps if s.get("action") == "checkpoint" and s.get("reason") == "login")
+        assert login.get("success"), f"{platform}: the login gate must clear itself"
+    assert any(s.get("action") == "date_wheel" and s["date"] == "{birthday}" for s in signup.load_steps("instagram"))
+
+
+def test_validator_refuses_a_secret_step_that_is_not_keyed_by_slug():
+    steps = [dict(s) for s in signup.load_steps("instagram")]
+    bad = next(s for s in steps if s.get("action") == "type_secret")
+    bad["service"] = "ofmai-social-instagram-sierra"
+    assert any("type_secret service" in p for p in signup.validate_steps(steps, "instagram"))
+
+
+def test_a_run_without_a_slug_is_refused_when_a_step_reads_the_keychain():
+    params = {k: v for k, v in GOOD_PARAMS.items() if k != "slug"}
+    assert any("no slug" in p for p in signup.validate_params(params, "instagram"))
+    assert any("no slug" in p for p in signup.validate_params(dict(params, slug="Sierra Cole"), "instagram"))

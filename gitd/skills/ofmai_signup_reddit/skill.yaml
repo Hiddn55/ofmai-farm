@@ -25,6 +25,7 @@ exports:
     - name: recorded
       description: Reddit signup by email, human gates, adult-content settings
       params:
+        slug: { type: string, required: true, description: "persona slug (sierra): names the Keychain entry ofmai-social-reddit-<slug> the password step reads (R9)" }
         email: { type: string, required: true }
         handle: { type: string, required: true }
         name: { type: string, required: true }

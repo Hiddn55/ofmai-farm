@@ -32,6 +32,7 @@ exports:
     - name: recorded
       description: Instagram signup by email, human gates
       params:
+        slug: { type: string, required: true, description: "persona slug (sierra): names the Keychain entry ofmai-social-instagram-<slug> the password step reads (R9)" }
         email: { type: string, required: true }
         handle: { type: string, required: true }
         name: { type: string, required: true }
