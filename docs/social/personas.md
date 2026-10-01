@@ -17,7 +17,7 @@ Un fichier YAML par personnage, `slug` = `utm_content` = `/c/<slug>` = nom du fi
 | `slug`, `ofmai` | `character_id`, `soul_id`, `lora_name`, `trigger_word` (= colonnes `AICharacter`) | banque `ContentAsset`, pont |
 | `identity` | `name`, `age`, `birthday`, `origin`, `city`, `timezone` (= `farm_accounts.timezone`), `market`, `language`, `disclosed`, `disclosed_since`, `signature` (2 traits + 1 trait décalé), `backstory` ≤ 80 mots, `visual_anchor`, `brand_colors` | légendes, réponses, page publique, **inscriptions** (`account-creation.md`) |
 | `identity.birthday` | date ISO `AAAA-MM-JJ`, cohérente avec `age`, jamais un 1ᵉʳ janvier ni une date connue, un jour et un mois différents d'une fiche à l'autre. **Les quatre plateformes demandent une date complète à l'inscription**, pas un âge : c'est cette valeur qui est tapée à l'écran (paramètre `birthday` des skills `ofmai_signup_*`, `account-creation.md` §6) et c'est elle qu'il faudra ressortir pour une vérification ou une récupération de compte, des mois plus tard. `age` reste dans la fiche parce qu'il sert aux textes (bio « sierra, 25, la ») ; il se recalcule depuis `birthday`, il ne le remplace pas | `account-creation.md` §6.0-§6.4, bios (§6), page publique |
-| `identity.disclosed` | `true` \| `false` — le personnage se déclare IA sur Instagram, TikTok, X et Reddit (bio, `#AI`, pool `ai`, comment-to-DM, et label AIGC figé à la mise en file) ; 3 fiches sur 6 à `true` (§3.3) ; sans effet sur Fanvue, toujours déclaré (§4) ; ne change pas pendant le test, hors les deux exceptions de §3.3 | bios, légendes (`content-pipeline.md`), `SocialPublication.aigcLabel` au moment de la mise en file, pont (`disclosed` dans `GET /api/farm/personas`), `metrics-attribution.md` (groupes `declared` / `undeclared`) |
+| `identity.disclosed` | `true` \| `false` — le personnage se déclare IA sur Instagram, TikTok, X et Reddit (`#AI` en légende, pool `ai`, comment-to-DM, et label AIGC figé à la mise en file — **jamais en bio**, décision du 2026-10-01 : la bio est la même pour les six, la divulgation vit dans les réponses) ; 3 fiches sur 6 à `true` (§3.3) ; sans effet sur Fanvue, toujours déclaré (§4) ; ne change pas pendant le test, hors les deux exceptions de §3.3 | bios, légendes (`content-pipeline.md`), `SocialPublication.aigcLabel` au moment de la mise en file, pont (`disclosed` dans `GET /api/farm/personas`), `metrics-attribution.md` (groupes `declared` / `undeclared`) |
 | `identity.disclosed_since` | date ISO ou `null` — renseignée seulement quand un personnage bascule en cours de test (§3.3) ; ses données antérieures restent dans son groupe d'origine jusqu'à cette date | `metrics-attribution.md` §8.3, pont (`bridge-ofmai-farm.md` §3.5) |
 | `niche` | `radar` (clé `TrackedInfluencer.niche`, libellés dans `lib/radar/niche-labels.ts`), `theme`, `vehicle`, `hashtags_niche` (CSV = `farm_accounts.niche`, repli des recherches de détour), `source` (fenêtre `window_days` / `window_days_max`, tri `outlierScore`, `account_type`, `media` = `ScrapedPost.mediaType` `video` \| `image`) — le radar est la seule source de contenu (`content-pipeline.md` §2) **et la source des cibles de chauffe** : `niche.radar` dit dans quelle niche du radar puiser les comptes que le personnage suit et les profils qu'il visite (`warming-policy.md` §8.2, `GET /api/farm/targets`) | programmateur, planner, sélection des posts source, sélection des cibles de suivi |
 | `voice` | `tone`, `writing`, `reply_tone`, `emoji` | légendes, `comment_reply` / `dm_reply` |
@@ -122,13 +122,13 @@ reply_pools:                                # reponses sous ses propres posts, A
     question: ["all in my bio", "asked and answered: AI"]
 accounts:
   instagram: {handle: sierra.cole, content_type: sfw, channel: device,
-              bio: "sierra, 25, la\nAI character, made on ofmai\n6am club"}
+              bio: "sierra, 25, la\n6am club\nnew every day"}
   tiktok:    {handle: sierra.cole, content_type: sfw, channel: device,   # api a partir du cruise (publishing.md)
-              bio: "sierra | 25 | la | AI character made on ofmai"}
+              bio: "sierra | 25 | la | 6am club"}
   x:         {handle: sierracole_ai, content_type: nsfw, channel: api, sensitive_media: true,
-              bio: "sierra. 25. la. AI character (virtual), made on OFMAI. 18+ only. links below"}
+              bio: "sierra. 25. la. 18+ only. links below"}
   reddit:    {handle: sierra_cole_ai, content_type: nsfw, channel: api,
-              bio: "AI-generated character (virtual), 18+. Everything is on my profile.",
+              bio: "25, la, 18+. Everything is on my profile.",
               subs_creators: [], subs_fans: []}          # classification des subs : publishing.md
   fanvue:    {handle: sierracole, ai_creator_badge: true, public_layer: sfw}
 links:
@@ -154,7 +154,7 @@ visual_refs:                                # cles S3, jamais de fichier dans le
 
 `<plateforme>` est remplacé au moment de poser le lien (`instagram`, `tiktok`, `x`, `reddit`) ; `dm_text` reste en une phrase, sans nom de fournisseur, et l'offre « 15 crédits » est le bonus d'inscription existant (`app/api/auth/[...nextauth]/route.ts` l. 114-135 : `purchasedCredits: 15`, « Welcome credits ») — rien à construire.
 
-Une fiche `disclosed: false` (Skyler, Riley, Vera, §3.3) diffère sur cinq points, et seulement ceux-là : `hashtags.always: []` ; pas de pool `reply_pools.*.ai` ; bios sans « AI » ni « made on ofmai » (§6) ; pseudos sans `ai` ; `dm_text` et `dm_offer` absents (aucun comment-to-DM). `fanvue.ai_creator_badge` reste `true`.
+Une fiche `disclosed: false` (Skyler, Riley, Vera, §3.3) diffère sur cinq points, et seulement ceux-là : `hashtags.always: []` ; pas de pool `reply_pools.*.ai` ; (les bios sont sans « AI » pour les six depuis le 2026-10-01, §6) ; pseudos sans `ai` ; `dm_text` et `dm_offer` absents (aucun comment-to-DM). `fanvue.ai_creator_badge` reste `true`.
 
 ## 3. Les six personnages
 
@@ -196,7 +196,7 @@ Six personnages **tous neufs**, un par niche, créés from scratch sur le **comp
 | Slug | Nom (à valider) | Pseudo IG / TikTok (à valider) | Ancre visuelle proposée (builder, `character-create-catalog.ts`) | Niche radar | Ville / fuseau | `disclosed` (§3.3) |
 |---|---|---|---|---|---|---|
 | `sierra` | Sierra Cole | `sierra.cole` | `mixed_race`, `athletic`, `brown` `ponytail`, `hazel`, `beauty_mark` sous l'œil gauche | `fitness` | Los Angeles, CA / `America/Los_Angeles` | `true` |
-| `camila` | Camila Reyes | `camila.reyes` | `latina`, `slim_thick`, `black` `long_wavy`, `brown`, petites créoles or | `latina` | Miami, FL / `America/New_York` | `true` |
+| `camila` | Camila Reyes | `camila.reyes` | `latina`, `slim_thick`, `black` `long_wavy`, `brown`, petites créoles or | `latina` | Chevy Chase, MD (« dc », ville du proxy) / `America/New_York` | `true` |
 | `hana` | Hana Lee | `hana.lee.ai` | `east_asian`, `slim`, `black` `long_straight` à frange, `brown`, lumière douce, minimal | `asiatique` | San Francisco, CA / `America/Los_Angeles` | `true` |
 | `skyler` | Skyler Rae | `skylerrae` | `caucasian`, `curvy`, `platinum` `long_straight`, `blue`, lèvres glossy, ongles longs, rose partout | `bimbo` | Las Vegas, NV / `America/Los_Angeles` | `false` |
 | `riley` | Riley Vex | `rileyvex` | `caucasian`, `slim`, `colored` (mi-noir mi-rose) `medium`, `gray`, eyeliner ailé, `piercings` (septum), setup gaming ; non asiatique | `e-girl` | Seattle, WA / `America/Los_Angeles` | `false` |
@@ -206,9 +206,9 @@ Aucun tatouage sur les six (même la gothique) : c'est la raison de l'exclusion 
 
 | Slug | Bio (à valider) |
 |---|---|
-| `sierra` | `sierra, 25, la / AI character, made on ofmai / 6am club` |
-| `camila` | `camila, 24, miami / AI character, made on ofmai / sun, salsa, sunsets` |
-| `hana` | `hana, 23, sf / AI character, made on ofmai / soft light only` |
+| `sierra` | `sierra, 25, la / 6am club / new every day` |
+| `camila` | `camila, 24, dc / sun, salsa, sunsets / new every day` |
+| `hana` | `hana, 23, sf / soft light only / new every day` |
 | `skyler` | `skyler, 24, vegas / pink is a personality / new every day` |
 | `riley` | `riley, 22, seattle / online too much / new every day` |
 | `vera` | `vera, 25, chicago / black on black / new every day` |
@@ -272,9 +272,9 @@ Décision : **pas d'agrégateur**, une page auto-hébergée `app/c/[slug]/page.t
 
 | Plateforme | Limite [à vérifier] | Divulgation si `disclosed: true` | Exemple déclaré (Sierra) | Exemple non déclaré (Skyler) | Tapée sur l'appareil |
 |---|---|---|---|---|---|
-| Instagram | 150 car. | « AI character » en bio, `#AI` en légende, auto-déclaration IA à la publication [à vérifier depuis l'app] | `sierra, 25, la / AI character, made on ofmai / 6am club` | `skyler, 24, vegas / pink is a personality / new every day` | oui → ASCII |
-| TikTok | 80 car. | toggle AIGC à chaque post (`aigc_label` de la file, R2-R3) + mention en bio | `sierra \| 25 \| la \| AI character made on ofmai` | `skyler \| 24 \| vegas \| pink is a personality` | oui → ASCII |
-| X | 160 car. | « AI character (virtual) » en bio, réglage média sensible activé **avant** le premier post, nom et bio neutres (`lib/seo/academy/platforms.ts`, leçon X) | `sierra. 25. la. AI character (virtual), made on OFMAI. 18+ only. links below` | `skyler. 24. vegas. 18+ only. links below` | oui → ASCII |
+| Instagram | 150 car. | **rien en bio** (décision du 2026-10-01), `#AI` en légende, auto-déclaration IA à la publication [à vérifier depuis l'app] | `sierra, 25, la / 6am club / new every day` | `skyler, 24, vegas / pink is a personality / new every day` | oui → ASCII |
+| TikTok | 80 car. | toggle AIGC à chaque post (`aigc_label` de la file, R2-R3), **rien en bio** | `sierra \| 25 \| la \| 6am club` | `skyler \| 24 \| vegas \| pink is a personality` | oui → ASCII |
+| X | 160 car. | **rien en bio**, réglage média sensible activé **avant** le premier post, nom et bio neutres (`lib/seo/academy/platforms.ts`, leçon X) | `sierra. 25. la. 18+ only. links below` | `skyler. 24. vegas. 18+ only. links below` | oui → ASCII |
 | Reddit | 200 car. | « AI-generated character » en bio ; flair / tag IA du sub quand il existe (`publishing.md`) | `AI-generated character (virtual), 18+. Everything is on my profile.` | `24, vegas, 18+. Everything is on my profile.` | oui → ASCII |
 | Fanvue | — | badge « AI creator » **pour les six** + bio longue (80-120 mots, backstory + « made on OFMAI ») | version longue de la bio X | idem : badge et « made on OFMAI » même pour une fiche `disclosed: false` | non (navigateur) |
 

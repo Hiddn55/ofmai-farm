@@ -151,6 +151,10 @@ Repli : sans pont configuré, ou si OFMAI ne répond pas, ou si le radar n'a rie
 
 ## 8. Ce que la plateforme sert à une session : commentaires et cibles du radar
 
+### 8.0 Depuis le 2026-10-01 : le commentaire est écrit devant le post
+
+Les pools de §8.1 ne sont plus piochés : quand la session décide de commenter, elle envoie la capture, l'auteur et la légende du post à OFMAI (`bridge-ofmai-farm.md` §3.4 bis), qui écrit une ligne dans la voix du personnage, la passe par la porte de conformité et la journalise. Les pools servent d'**exemples de ton** dans le prompt. Sans réponse publiable, pas de commentaire. Même mécanique pour les réponses aux commentaires et DM reçus (`reply_ai` reste la seule divulgation IA ; aucune bio ne la porte plus).
+
 ### 8.1 Pools de commentaires par persona
 
 Le code attend `params.comments` (ASCII, un par ligne, `WarmSessionAction`), mais `planner.job_config` ne passe que `handle`, `minutes`, `niche` : **aujourd'hui aucune session ne commente**. Le pool vit côté OFMAI (`SocialCommentPool` : `characterId`, `platform`, `text`, `reservedUntil`, `usedAt`, `usedByHandle`), est servi par `GET /api/farm/comments?character_id=…&platform=…&n=10` et remonte dans `session_summary.comments_used` (`bridge-ofmai-farm.md` §3.4, §4.1).

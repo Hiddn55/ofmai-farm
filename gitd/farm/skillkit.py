@@ -12,6 +12,7 @@ import random
 from typing import Any, Callable
 
 from gitd.farm import ledger, policy
+from gitd.farm import composer as _composer
 from gitd.farm.human import HumanInput, SessionProfile
 from gitd.farm.warm import WarmConfig, run_session
 from gitd.skills.base import Action, ActionResult
@@ -119,6 +120,7 @@ class WarmSessionAction(Action):
             detour_kinds=self.default_detours,
             handle=acc.handle,
             advisor=_advisor.configured(),
+            composer=_composer.from_env(acc),
         )
         log.info(
             "[warm] @%s %s day %s phase %s — %.1f min, caps %s",

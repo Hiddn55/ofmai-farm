@@ -386,6 +386,47 @@ class InstagramAdapter:
         self.last_gesture_silent = True
         return False
 
+    def post_context(self, xml: str) -> dict:
+        """Author and caption of the topmost feed post, as the tree exposes
+        them (selectors-uiautomator.md): the handle in
+        `row_feed_photo_profile_name`, the caption in the comment text view,
+        and the media's own description as a fallback. Empty strings when a
+        label is missing — the screenshot carries the rest."""
+        from gitd.farm.niche import author_of
+
+        xml = xml or ""
+        author = ""
+        for n in nodes_where(xml, rid="com.instagram.android:id/row_feed_photo_profile_name"):
+            t = re.search(r'\btext="([^"]*)"', n)
+            if t and t.group(1).strip():
+                author = t.group(1).strip().lstrip("@").lower()
+                break
+        author = author or author_of(xml)
+        caption = ""
+        for rid in ("com.instagram.android:id/row_feed_comment_textview_layout", "com.instagram.android:id/row_feed_text"):
+            for n in nodes_where(xml, rid=rid):
+                t = re.search(r'\btext="([^"]*)"', n)
+                if t and t.group(1).strip():
+                    caption = t.group(1).strip()
+                    break
+            if caption:
+                break
+        if not caption:
+            for n in nodes_where(xml, rid="com.instagram.android:id/row_feed_photo_imageview"):
+                caption = desc_of(n).strip()
+                if caption:
+                    break
+        return {"author": author, "caption": caption[:600]}
+
+    def screenshot(self) -> bytes | None:
+        from gitd.bots.common.adb import capture_screencap_png
+
+        try:
+            return capture_screencap_png(self.device.serial)
+        except Exception as e:  # noqa: BLE001 — no screenshot is a poorer context, not a failure
+            log.debug("[instagram] screenshot failed: %s", type(e).__name__)
+            return None
+
     def back_to_feed(self) -> None:
         for _ in range(4):
             xml = self.dump()

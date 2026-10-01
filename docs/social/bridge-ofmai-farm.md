@@ -70,6 +70,18 @@ Body `{"device_serial":"R58N1234"}` — le serial ADB pour `channel=device`, la 
 
 `kind ∈ {comment, reply_ai, reply_thanks, reply_question}` (défaut `comment`). Renvoie `n` textes non encore utilisés du pool du personnage pour ce `kind`, ASCII, marqués `reserved_until = now + 24 h` : `{"comments":[{"id":"cp_1","kind":"comment","text":"the light in this one!!"}, …]}`. Le planner (`gitd/farm/planner.py` `job_config`) passe les `comment` dans `params.comments` (séparés par `\n`, format attendu par `WarmSessionAction`, `gitd/farm/skillkit.py`) — aujourd'hui `job_config` ne passe que `handle`, `minutes`, `niche` ; le job `comment_reply` (E3.2) reçoit `params.replies_ai`, `params.replies_thanks`, `params.replies_question` (`\n`-séparés, 5 chacun). La consommation réelle est remontée par le résumé de session (§4.1, `comments_used` + `replies_used`) ; un texte non consommé redevient disponible à l'expiration de la réservation.
 
+### 3.4 bis `POST /api/farm/comments/compose` — le commentaire écrit devant le post (2026-10-01)
+
+Décision de Nathan : une phrase écrite à l'avance ne colle jamais au post qu'elle commente. La ferme n'écrit plus ses commentaires depuis le pool ; **elle envoie ce qu'elle voit et OFMAI écrit la phrase**, dans la voix du personnage, au moment de l'action.
+
+Corps (JSON) : `character_id`, `platform`, `kind` (`comment` | `reply_ai` | `reply_thanks` | `reply_question`, défaut `comment`), `author` (pseudo lu à l'écran), `caption` (légende lue dans l'arbre), `screenshot_base64` (PNG de l'écran, optionnel), `incoming_text` (pour une réponse : le commentaire ou le DM reçu), `handle` (le compte qui parle, pour le journal).
+
+Côté OFMAI (`lib/social/compose-comment.ts`) : la fiche complète du personnage fait le prompt (nom, âge, ville, histoire, voix, vocabulaire, et **10 phrases du pool comme exemples de ton**, jamais à réutiliser) ; un seul appel multimodal (Gemini, capture + légende) ; la sortie est réduite à une ligne ASCII de 90 caractères au plus ; puis **la porte de conformité** (`checkText`, kind `comment` ou `reply`) : pas de lien, pas de prix, pas de nom de fournisseur, pas de mention IA dans un commentaire (elle vit dans les réponses `reply_ai` d'une déclarée). Chaque appel est journalisé en `FarmEvent` (`kind: comment_composed`, texte rendu ou refusé, auteur, légende) pour relecture dans l'admin.
+
+Réponse : `{ "text": "ok the light on this", "reason": null }` ou `{ "text": null, "reason": "compliance" | "no_text" | "llm_error" }`. **`text: null` = la ferme ne commente pas.** Jamais de phrase de repli, ni côté OFMAI ni côté ferme.
+
+Côté ferme (`gitd/farm/composer.py`, branché par `skillkit.py` dans `WarmConfig.composer`) : le client n'est construit qu'au premier commentaire (une session qui ne commente pas ne touche pas au pont) ; sans `FARM_OFMAI_BASE_URL`, ou sans `character_id` sur le compte, la session regarde, like, suit, mais ne parle pas. `GET /api/farm/comments` (§3.4) reste en place pour les tests et comme réserve ; la chauffe ne l'appelle plus quand un compositeur existe.
+
 ### 3.5 `GET /api/farm/personas/{character_id}`
 
 Sous-ensemble de la fiche persona (`personas.md`) utile sur l'appareil : `handles` par plateforme, `bio` par plateforme (déjà écrite selon le groupe de divulgation), `disclosed`, `disclosed_since` (`null`, ou la date ISO de la bascule prévue par la règle de §3.1), `niche` (hashtags de détour), `forbidden_words`, `reply_tone`, `links`. Ces deux champs ne servent qu'aux **bios** et au pool `reply_ai` ; le label d'un post vient de `aigc_label` (§3.2). Lecture seule, sans cache côté fork au-delà d'une journée.

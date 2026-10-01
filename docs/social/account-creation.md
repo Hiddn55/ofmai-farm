@@ -65,8 +65,8 @@ Lancement : **directement par le runner, en sous-processus détaché** (à la ma
 cd ~/ofmai-farm && PYTHONPATH=. python -u gitd/skills/_run_skill.py \
   --skill ofmai_signup_instagram --workflow recorded --device R58N1234 \
   --params '{"slug":"sierra","email":"sierra.cole.ai@gmail.com","handle":"sierra.cole","name":"Sierra Cole","birthday":"2001-08-26",
-             "bio_line1":"sierra, 25, la","bio_line2":"AI character, made on ofmai","bio_line3":"6am club"}'
-# les trois lignes sont la bio Instagram de sierra.yaml : elle est declaree, d'ou le « AI character ».
+             "bio_line1":"sierra, 25, la","bio_line2":"6am club","bio_line3":"new every day"}'
+# les trois lignes sont la bio Instagram de sierra.yaml. Aucune mention IA en bio (decision du 2026-10-01) : elle vit dans les reponses en DM.
 # Une fiche disclosed: false passe sa propre bio, sans aucune mention IA (personas.md §6).
 ```
 

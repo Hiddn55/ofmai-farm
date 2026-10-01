@@ -92,14 +92,14 @@ def _clock():
     return now, sleep
 
 
-def _run(phase_day: int, *, seed=1, comments=(), niche=("fitness",), minutes=30, adapter=None, platform="instagram"):
+def _run(phase_day: int, *, seed=1, comments=(), niche=("fitness",), minutes=30, adapter=None, platform="instagram", composer=None):
     now, sleep = _clock()
     dev = FakeDevice()
     human = HumanInput(dev, SessionProfile.generate(seed), screen=ScreenSize(1080, 2400), sleep=sleep)
     budget = policy.DailyBudget.build("acct", platform, date(2026, 9, 1), date(2026, 9, phase_day))
     ledger = FakeLedger(budget)
     adapter = adapter or FakeAdapter()
-    cfg = WarmConfig(minutes=minutes, phase=budget.phase, comments=list(comments), niche=list(niche), detour_kinds=("search", "stories"))
+    cfg = WarmConfig(minutes=minutes, phase=budget.phase, comments=list(comments), niche=list(niche), composer=composer, detour_kinds=("search", "stories"))
     stats = run_session(adapter, human, ledger, cfg, now=now)
     return stats, ledger, adapter
 
@@ -230,3 +230,36 @@ def test_niche_handles_drive_oriented_reels_runs():
 def test_a_hashtag_only_niche_keeps_the_old_rhythm():
     stats, _, adapter = _run(2, niche=("fitness",), minutes=10)
     assert stats.oriented == 0
+
+
+# ── the comment is written in front of the post (2026-10-01) ─────────────────
+
+
+def test_a_composer_writes_the_comment_from_what_the_adapter_sees():
+    class SeeingAdapter(FakeAdapter):
+        def post_context(self, xml):
+            return {"author": "gymshark", "caption": "leg day"}
+
+        def screenshot(self):
+            return b"\x89PNG"
+
+    seen = []
+
+    def composer(ctx):
+        seen.append(ctx)
+        return "ok the leg day energy"
+
+    adapter = SeeingAdapter()
+    stats, ledger, adapter = _run(25, comments=["from the pool"], minutes=60, adapter=adapter, composer=composer)
+    comments = [e for e in adapter.events if isinstance(e, tuple) and e[0] == "comment"]
+    assert comments and all(c[1] == "ok the leg day energy" for c in comments)
+    assert "from the pool" not in [c[1] for c in comments]  # the pool is never used with a composer
+    assert seen[0]["author"] == "gymshark" and seen[0]["caption"] == "leg day" and seen[0]["screenshot"] == b"\x89PNG"
+    assert stats.comments == len(comments)
+
+
+def test_a_composer_with_nothing_to_say_means_no_comment():
+    adapter = FakeAdapter()
+    stats, ledger, adapter = _run(25, comments=["from the pool"], minutes=60, adapter=adapter, composer=lambda ctx: None)
+    assert not [e for e in adapter.events if isinstance(e, tuple) and e[0] == "comment"]
+    assert stats.comments == 0 and stats.compose_skipped > 0

@@ -129,6 +129,7 @@ class SessionStats:
     # (bridge-ofmai-farm.md §4.1): a comment is drawn at random from the list, so
     # the order is not predictable without saying which ones were used.
     comments_used: list[str] = field(default_factory=list)
+    compose_skipped: int = 0  # the composer had nothing publishable to say
     replies_used: list[str] = field(default_factory=list)
     # Niche accounts opened for an oriented run this session ("@handle" as it
     # was searched): skillkit stamps them in farm_targets after the run, so the
@@ -148,6 +149,11 @@ class WarmConfig:
     detour_kinds: tuple[str, ...] = ("search",)  # skill adds "stories" when it can
     handle: str = ""  # named in the unknown-screen evidence and alert
     advisor: Callable | None = None  # tier 2 of unstuck.py, None = no model
+    # Writes the comment in front of the post (gitd/farm/composer.py): called
+    # with {"author", "caption", "screenshot"}, answers a line or None. When
+    # set, the `comments` pool is never used; when None, the pool is the
+    # legacy path (tests) — a real session without a composer does not comment.
+    composer: Callable[[dict], str | None] | None = None
 
 
 def run_session(
@@ -278,11 +284,19 @@ def run_session(
                             break
                     adapter.back_to_feed()
 
-            # comment
-            if prop.comment and comments and ledger.allow(policy.COMMENT) and human.profile.chance(prop.comment):
-                text = comments.pop(rng.randrange(len(comments)))
-                human.pause(1.5)  # thinking
-                if adapter.comment(text):
+            # comment — written in front of the post by the composer (2026-10-01),
+            # or, without one, drawn from the legacy pool
+            if prop.comment and (cfg.composer or comments) and ledger.allow(policy.COMMENT) and human.profile.chance(prop.comment):
+                if cfg.composer is not None:
+                    text = cfg.composer(post_context(adapter, xml))
+                    if not text:
+                        stats.compose_skipped += 1
+                        text = None
+                else:
+                    text = comments.pop(rng.randrange(len(comments)))
+                if text is None:
+                    pass
+                elif (human.pause(1.5) or True) and adapter.comment(text):  # 1.5 s: "thinking"
                     ledger.record(policy.COMMENT)
                     stats.comments += 1
                     # Only a text that really went through is consumed; anything
@@ -343,6 +357,29 @@ def run_session(
 
 _NODE = re.compile(r"<node[^>]+/?>")
 _BOUNDS = re.compile(r'bounds="\[(\d+),(\d+)\]\[(\d+),(\d+)\]"')
+
+
+def post_context(adapter, xml: str) -> dict:
+    """What the composer gets to see: the author and caption the adapter can
+    read from the tree, and a screenshot when the adapter can take one.
+    Adapters without these methods give an empty context — the composer then
+    writes something generic, or nothing."""
+    ctx: dict = {}
+    read = getattr(adapter, "post_context", None)
+    if callable(read):
+        try:
+            ctx.update({k: v for k, v in (read(xml) or {}).items() if v})
+        except Exception as e:  # noqa: BLE001 — a tree we cannot read is an empty context, not a crash
+            log.debug("[warm] post_context failed: %s", type(e).__name__)
+    shot = getattr(adapter, "screenshot", None)
+    if callable(shot):
+        try:
+            png = shot()
+            if png:
+                ctx["screenshot"] = png
+        except Exception as e:  # noqa: BLE001
+            log.debug("[warm] screenshot failed: %s", type(e).__name__)
+    return ctx
 
 
 def nodes_where(xml: str, *, desc: str | None = None, text: str | None = None, rid: str | None = None) -> list[str]:
