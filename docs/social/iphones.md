@@ -11,7 +11,7 @@ Une ligne par téléphone, remplie au fur et à mesure. Les colonnes vides sont 
 
 | Slot | Modèle | Acheté le | N° de série / UDID | IMEI | Ligne (numéro) | Opérateur | Personnage | Apple ID (adresse iCloud) | Mode dév. | WDA | Réseaux créés |
 |---|---|---|---|---|---|---|---|---|---|---|---|
-| `iphone-01` | iPhone 12 64 Go | 2026-10 | | | | B&You 90 Go | *(à décider)* | *(après la SIM)* | | | |
+| `iphone-01` | iPhone 12 64 Go | 2026-10 | | | *(SIM pas encore reçue)* | B&You 90 Go | **Léa Marchand** (née le 14/03/2002) | `sierracole@proton.me` (créé le 20/10/2026 ; numéro de confiance = celui de Nathan, **à remplacer par la ligne du personnage à l'arrivée de la SIM** ; mot de passe : Trousseau `ofmai-social-apple-iphone-01`) | | | |
 | `iphone-02` | iPhone 12 64 Go | 2026-10 | | | | B&You 90 Go | *(à décider)* | *(après la SIM)* | | | |
 
 Le numéro de série et l'UDID se lisent dans Réglages → Général → Informations, ou depuis le Mac mini une fois branché : `xcrun xctrace list devices` ou `idevice_id -l`.
@@ -30,6 +30,8 @@ security add-generic-password -s ofmai-social-sim-<slug> -a "+33…" -w "+33… 
 # relire
 security find-generic-password -s ofmai-social-apple-<slug> -w
 ```
+
+Note du 20/10 : l'Apple ID d'`iphone-01` a été créé avec la boîte Proton de Sierra (`sierracole@proton.me`) plutôt qu'avec une adresse iCloud neuve. Ça fonctionne ; une adresse `@icloud.com` pourra être ajoutée plus tard dans Réglages → iCloud → Mail si on en veut une au nom de Léa.
 
 Le compte développeur Apple (99 $/an, celui qui signe WebDriverAgent) est **un seul compte, à ton nom**, sur le Mac mini : `ofmai-apple-developer` dans le Trousseau. Il ne se connecte jamais sur un iPhone.
 
