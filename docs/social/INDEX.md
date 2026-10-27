@@ -18,6 +18,7 @@
 
 | Fichier | Répond à | Statut |
 |---|---|---|
+| `runbook-mac-mini-ios.md` | installer la ferme sur le Mac mini et obtenir le premier dump d'écran d'un iPhone (versions Xcode/iOS, Appium, WebDriverAgent, variables, ordre des étapes) | **à jour au 2026-10-27** |
 | `iphones.md` | registre des iPhones (slot, ligne, personnage, Apple ID) et procédure de mise en service ; les secrets sont dans le Trousseau, jamais ici | **à jour au 2026-10-20** |
 | `ETAT.md` | **le point d'entrée** : état du projet (fait / pas bon / reste), reprise à froid, règles apprises ; réécrit à chaque séance | **à jour au 2026-09-23** |
 | `rules.md` | les 36 règles absolues (personnages synthétiques, divulgation IA 3 sur 6, SFW/NSFW par host et par plateforme, comptes, texte publié, quotas et rythme, réseau, liens, humain dans la boucle, kill-switches et santé collective, médias et code, exploration des écrans sur le seul profil explorateur), pourquoi, et ce que le code garantit ou non | en vigueur |

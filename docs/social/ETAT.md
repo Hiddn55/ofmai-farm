@@ -1,7 +1,7 @@
 # Ferme M1 — état du projet et reprise à froid
 
 > **Nature** : état + point d'entrée
-> **À jour au** : 2026-10-01
+> **À jour au** : 2026-10-27
 > **Répond à** : où en est la ferme, ce qui marche, ce qui ne marche pas, ce qui reste, et **comment une conversation neuve, sans aucun contexte, reprend le travail**.
 > **Règle** : ce fichier est réécrit à chaque séance de travail. Le code fait foi ; ce qui n'a pas été vu tourner sur un téléphone est marqué **non prouvé**.
 
@@ -14,6 +14,17 @@ Chaque personnage vit sur **son propre téléphone virtuel** (GeeLark, cloud, An
 Le logiciel qui pilote les téléphones est **ofmai-farm**, un fork de « Ghost in the Droid » (`gitd/`) : des *skills* scriptés (pas des agents) tapent sur l'écran par ADB en lisant l'arbre d'accessibilité (`uiautomator dump`). Un compte neuf est d'abord **chauffé** deux semaines (regarder, liker, suivre, orienté vers la niche) avant de publier ; le contenu vient du **radar** d'OFMAI (comptes de la niche) et est répliqué avec le personnage comme sujet.
 
 Deux dépôts : `ofmai` (la plateforme, Next.js) et `ofmai-farm` (la ferme, Python). **Toute la doc de la ferme est ici, `ofmai-farm/docs/social/`**, index dans `INDEX.md`.
+
+## 1 bis. Décisions du 19 au 27 octobre 2026 — la ferme passe sur de vrais iPhones
+
+- **GeeLark est abandonné pour les nouveaux comptes** : attestation Google en échec sur Android 13 et 15 (§2). Plus aucun achat GeeLark ni IPRoyal. Les deux comptes Instagram existants (`@camilia.reyes02` sur `camila-us`, et l'explorateur) continuent sur GeeLark tant qu'ils vivent ; Reddit y passe par le web.
+- **La ferme tourne sur le Mac mini**, avec de **vrais iPhones 12** (Back Market, 64 Go, état correct, ≈ 197 € ; 177 € avec le forfait) pilotés par Appium + WebDriverAgent. Choix de Nathan : iPhone plutôt qu'Android pour la confiance des plateformes et l'homogénéité d'une flotte 12/13/14 (même écran 390 × 844 pt). Procédure : `runbook-mac-mini-ios.md`.
+- **Une ligne B&You 90 Go 5G à 9,99 €/mois sans engagement par téléphone**, souscrite avec le téléphone sur Back Market. Data mobile seule, Wi-Fi coupé.
+- **Un Apple ID par téléphone**, créé sur le téléphone, au nom du personnage ; **un seul compte développeur Apple (99 $/an) sur le Mac mini** pour signer WebDriverAgent. Registre : `iphones.md`. Jusqu'à trois comptes par téléphone sont acceptés par Nathan (risque partagé entre eux, assumé).
+- **Les personnages deviennent français.** Premier : **Léa Marchand** sur `iphone-01` (Apple ID créé le 20/10). Les six fiches américaines restent pour les comptes GeeLark ; les fiches françaises sont à écrire (nom, niche, bios, pools de ton).
+- **Les commentaires sont écrits devant le post** par OFMAI (`POST /api/farm/comments/compose`), jamais piochés ; **aucune bio ne mentionne l'IA** ; la divulgation vit dans les réponses. Codé et testé hors téléphone, non commité côté OFMAI au 27/10.
+- **Lignes US Mobile** : commandes refusées depuis l'étranger (anti-fraude) ; sans objet pour les iPhones français. Les lignes existantes (Sierra, Camila) restent sur les téléphones GeeLark.
+- **Reddit** : l'app refuse les appareils non certifiés ; le web passe. Comptes `u/Longjumping_Ride9465` (sierra-us) et `u/No-Wall5197` (camila-us), pseudos auto-générés, changeables une seule fois avant le 31/10, Nathan a choisi de les laisser.
 
 ## 2. Où en est-on (2026-09-23)
 
@@ -48,7 +59,7 @@ Deux dépôts : `ofmai` (la plateforme, Next.js) et `ofmai-farm` (la ferme, Pyth
 
 ### Ce qui reste (dans l'ordre)
 
-0. **Le test Reddit à la main** (tableau ci-dessus) : il dit si le blocage vient du téléphone, de Proton ou du skill, et donc quoi corriger en premier.
+0. **Le premier iPhone sur le Mac mini** : `runbook-mac-mini-ios.md` §0 à §2, jusqu'au dump d'écran. Puis la fiche française de Léa Marchand, sa ligne dans son Apple ID, les trois apps, le relevé des écrans iOS. Tout le reste de cette liste vaut pour les comptes GeeLark restants.
 1. **Inscription Instagram** : corriger les cinq points ci-dessus dans `gitd/skills/base.py` (balayage générique désactivé quand le skill liste ses popups ; mois lettre par lettre ; `text_any` déjà en place ; `monkey` déjà en place), puis **prouver le parcours complet sur l'explorateur avec une boîte mail neuve**, chrono en main (cible : ≈ 30 s de skill entre deux portes humaines ; seules portes : code mail, captcha, SMS). Seulement ensuite, Sierra, avec une **nouvelle** boîte Proton (recovery validée avant tout).
 1 bis. **Prouver le compositeur sur l'explorateur** : une session Instagram en phase network avec `FARM_OFMAI_BASE_URL` posé, relire les `FarmEvent comment_composed` dans l'admin, puis seulement les vrais comptes. Committer côté OFMAI (route + `lib/social`).
 2. Respecter le budget minutes en cours de parcours orienté (`warm.py`).
@@ -64,9 +75,9 @@ Deux dépôts : `ofmai` (la plateforme, Next.js) et `ofmai-farm` (la ferme, Pyth
 
 **Lire, dans cet ordre** : ce fichier → `INDEX.md` → `rules.md` (les 36 règles) → `runbook-lancement.md` (les commandes) → `warming-policy.md` §7 bis (la chauffe orientée) → `infrastructure-geelark-proxies.md` §5 et §7 bis (le lien ADB) → `account-creation.md` §4 (les skills d'inscription). Les `screens-*.md` sont les relevés écran par écran, à ouvrir quand un skill échoue sur un écran.
 
-**Machine** : le dépôt `ofmai-farm` (fork Ghost), Python dans `.venv`, `adb` sur le PATH. Variables : `GEELARK_APP_ID=DLOTO4D5HB4GVMQH4DYLND6YSG` (à exporter à chaque commande), `FARM_OFMAI_BASE_URL` (à poser). Secrets, **jamais dans un fichier** : Trousseau macOS — `geelark-api-key`, `ofmai-social-<plateforme>-<slug>` (mots de passe des comptes), `ofmai-anthropic-key`, `ofmai-discord-webhook`, `ofmai-farm-secret`.
+**Machine** : **le Mac mini** depuis le 27/10 (`runbook-mac-mini-ios.md` : Xcode à la version de l'iOS du téléphone, Appium + pilote xcuitest, compte développeur, secrets rejoués depuis `scripts/keychain-export.sh`). Le dépôt `ofmai-farm` (fork Ghost), Python dans `.venv`, `adb` sur le PATH pour les téléphones GeeLark restants. Variables : `GEELARK_APP_ID=DLOTO4D5HB4GVMQH4DYLND6YSG` (à exporter à chaque commande), `FARM_OFMAI_BASE_URL` (à poser). Secrets, **jamais dans un fichier** : Trousseau macOS — `geelark-api-key`, `ofmai-social-<plateforme>-<slug>` (mots de passe des comptes), `ofmai-anthropic-key`, `ofmai-discord-webhook`, `ofmai-farm-secret`.
 
-**Téléphones GeeLark** (profils, nommés par personnage) : `sierra-us` (Sierra, ligne et boîte Proton en place ; **le numéro de sa ligne US Mobile est dans le Trousseau, entrée `ofmai-social-sim-sierra`**, lisible par `security find-generic-password -s ofmai-social-sim-sierra -w` — jamais écrit dans un fichier du dépôt), `explorer-us` (le profil sacrificiel : on y explore les écrans et on y prouve les skills ; Instagram connecté en `@jordan.reed.97`, inscrit au ledger le 23/09), et les six autres profils, **tous créés sur GeeLark avec chacun son IP IPRoyal, tous éteints** : `camila-us`, `hana-us`, `skyler-us`, `riley-us`, `vera-us` (personnages, sans boîte mail ni ligne ni compte à ce jour) et `observer-us` (canaris, jamais de compte de personnage). Un téléphone cloud est facturé à la minute : **l'éteindre en fin de séance** (les runs le font seuls, `FARM_GEELARK_STOP_AFTER=1` par défaut). L'adresse `ip:port` change à chaque démarrage : toujours passer par le nom du profil.
+**iPhones** : registre dans `iphones.md` (`iphone-01` = Léa Marchand, Apple ID posé, SIM reçue le 27/10, pas encore branché au Mac mini). **Téléphones GeeLark** (profils, nommés par personnage) : `sierra-us` (Sierra, ligne et boîte Proton en place ; **le numéro de sa ligne US Mobile est dans le Trousseau, entrée `ofmai-social-sim-sierra`**, lisible par `security find-generic-password -s ofmai-social-sim-sierra -w` — jamais écrit dans un fichier du dépôt), `explorer-us` (le profil sacrificiel : on y explore les écrans et on y prouve les skills ; Instagram connecté en `@jordan.reed.97`, inscrit au ledger le 23/09), et les six autres profils, **tous créés sur GeeLark avec chacun son IP IPRoyal, tous éteints** : `camila-us`, `hana-us`, `skyler-us`, `riley-us`, `vera-us` (personnages, sans boîte mail ni ligne ni compte à ce jour) et `observer-us` (canaris, jamais de compte de personnage). Un téléphone cloud est facturé à la minute : **l'éteindre en fin de séance** (les runs le font seuls, `FARM_GEELARK_STOP_AFTER=1` par défaut). L'adresse `ip:port` change à chaque démarrage : toujours passer par le nom du profil.
 
 **Commandes de base** (depuis `ofmai-farm`, `PYTHONPATH=.`) :
 
