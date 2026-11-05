@@ -34,7 +34,9 @@ Nathan a fait analyser les 153 reels de @doriansyd, un opérateur OFM qui fait t
 - **Ses repères de portée**, dont un signal qui nous manquait (aucun reel au-dessus d'environ 200 vues après 3 semaines) → `health-canaries.md` §2 bis.
 - **Un contenu unique par compte**, déjà garanti chez nous. Sa chute de septembre (1 000 reels étalés sur 100 téléphones) en est la preuve → `content-pipeline.md` §1, garantie 4.
 
-À surveiller : il a abandonné WebDriverAgent (« ça bug énormément »). Compter les décrochages de WDA dès qu'il y a plusieurs iPhones sur le Mac mini.
+À surveiller : il a abandonné WebDriverAgent (« ça bug énormément »). Compter les décrochages de WDA dès qu'il y a plusieurs iPhones sur le Mac mini. **Ses remplaçants, si WDA ne tient pas chez nous** : un Raspberry Pi Pico branché en USB qui se présente comme clavier/souris (HID) — rien n'est installé sur l'iPhone —, ou Yapster (télécommande d'iPhones dans le navigateur, 17-20 $/iPhone/mois, qu'il vend lui-même : avis non neutre). Il a aussi quitté GeeLark et LDPlayer (bans, portée plafonnée), ce qui confirme notre §2.
+
+**À ne pas copier** : le cloaking des liens et le jailbreak multi-comptes (environ 40 % de pertes selon lui). Ses chiffres de volume se contredisent d'un reel à l'autre (2 000 à 10 000 reels/jour ; « 120 iPhones » contre 80 à son tableau du 29/10) : ne pas s'en servir comme repères. Analyses brutes reel par reel : `content-lab/OFMAI/veille/doriansyd/` (non versionné).
 
 ## 1 quater. 5 novembre 2026 — couche iOS : on essaie Kevs-IOS-Agents avant d'écrire la nôtre
 
