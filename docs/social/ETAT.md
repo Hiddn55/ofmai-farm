@@ -1,7 +1,7 @@
 # Ferme M1 — état du projet et reprise à froid
 
 > **Nature** : état + point d'entrée
-> **À jour au** : 2026-10-27
+> **À jour au** : 2026-11-05
 > **Répond à** : où en est la ferme, ce qui marche, ce qui ne marche pas, ce qui reste, et **comment une conversation neuve, sans aucun contexte, reprend le travail**.
 > **Règle** : ce fichier est réécrit à chaque séance de travail. Le code fait foi ; ce qui n'a pas été vu tourner sur un téléphone est marqué **non prouvé**.
 
@@ -25,6 +25,40 @@ Deux dépôts : `ofmai` (la plateforme, Next.js) et `ofmai-farm` (la ferme, Pyth
 - **Les commentaires sont écrits devant le post** par OFMAI (`POST /api/farm/comments/compose`), jamais piochés ; **aucune bio ne mentionne l'IA** ; la divulgation vit dans les réponses. Codé et testé hors téléphone, non commité côté OFMAI au 27/10.
 - **Lignes US Mobile** : commandes refusées depuis l'étranger (anti-fraude) ; sans objet pour les iPhones français. Les lignes existantes (Sierra, Camila) restent sur les téléphones GeeLark.
 - **Reddit** : l'app refuse les appareils non certifiés ; le web passe. Comptes `u/Longjumping_Ride9465` (sierra-us) et `u/No-Wall5197` (camila-us), pseudos auto-générés, changeables une seule fois avant le 31/10, Nathan a choisi de les laisser.
+
+## 1 ter. 31 octobre 2026 — trois points repris d'une veille
+
+Nathan a fait analyser les 153 reels de @doriansyd, un opérateur OFM qui fait tourner environ 100 iPhones (rapport : https://claude.ai/artifact/PDGzX1sJhQoDJuf61yfmWU). Ce n'est pas une référence technique : il vend une formation et l'outil de pilotage qu'il recommande, ses chiffres changent d'un reel à l'autre, et il ne dit rien du réseau ni de la chauffe. Trois points sont repris, **non prouvés chez nous** :
+
+- **Les réglages de ferme de chaque iPhone** (AirDrop, En veille, orientation, localisation, clavier, Ne pas déranger) → `iphones.md` §3.1, point 8.
+- **Ses repères de portée**, dont un signal qui nous manquait (aucun reel au-dessus d'environ 200 vues après 3 semaines) → `health-canaries.md` §2 bis.
+- **Un contenu unique par compte**, déjà garanti chez nous. Sa chute de septembre (1 000 reels étalés sur 100 téléphones) en est la preuve → `content-pipeline.md` §1, garantie 4.
+
+À surveiller : il a abandonné WebDriverAgent (« ça bug énormément »). Compter les décrochages de WDA dès qu'il y a plusieurs iPhones sur le Mac mini.
+
+## 1 quater. 5 novembre 2026 — couche iOS : on essaie Kevs-IOS-Agents avant d'écrire la nôtre
+
+**C'est la prochaine action. Une conversation qui reprend sur le Mac mini commence ici.**
+
+- **`iphone-01`** (Léa Marchand) est en **iOS 26.4.2**. L'Apple ID au nom de Léa est créé (Nathan, confirmé le 05/11 ; mot de passe au Trousseau `ofmai-social-apple-iphone-01`, à rejouer sur le Mac mini par `scripts/keychain-export.sh`).
+- **Le MacBook de Nathan ne peut pas piloter cet iPhone** : macOS 14.5 + Xcode 15.3 s'arrêtent à iOS 17.4. Le test se fait sur le **Mac mini**, avec un Xcode qui gère iOS 26.4 (et le macOS qu'il exige).
+- **Découverte** : https://github.com/kevinbadi/Kevs-IOS-Agents (Apache-2.0, TypeScript, Node 22+, Postgres, créé le 06/09, dernier push le 21/09). Ce n'est **pas** un parent de notre fork (le nôtre vient de Ghost in the Droid, Python). Il apporte exactement ce qui nous manque côté iOS : superviseur WebDriverAgent qui relance WDA seul (`src/devices/wda-service.ts`) + deux correctifs WDA (`Patches/`), assistant d'enregistrement d'un iPhone, launchd + `deploy/setup-mac-mini.sh`, écran en direct (MJPEG), import d'un média dans Photos puis publication Instagram/TikTok, profil d'écran `iphone13` = 390 × 844 pt (celui de l'iPhone 12). Il n'a ni chauffe orientée, ni ledger, ni compositeur, ni canaris : notre ferme reste le cerveau. Faiblesse : taps à coordonnées fixes (cassent aux mises à jour d'app), humanisation = pauses uniformes.
+- **Décision (validée par Nathan le 05/11)** : l'installer **à côté** de `ofmai-farm` sur le Mac mini (`../ios-farm-kev`), brancher `iphone-01`, et vérifier en une séance : enregistrement de l'appareil, écran en direct, un tap à distance, un scroll Instagram **sur une session de test, jamais sur un compte de personnage**. Si ça tient, `ofmai-farm` le pilote par son API ; on ne porte en Python que ce qui a marché.
+
+**Pas à pas sur le Mac mini** :
+
+```sh
+cd ~/…/V2\ paiement && git clone https://github.com/kevinbadi/Kevs-IOS-Agents.git ios-farm-kev && cd ios-farm-kev
+# Node 22+ obligatoire (le MacBook avait 20 par défaut, 24 via nvm)
+npm install && npm run appium:install-driver
+# npm 11 bloque le script d'install de sharp : `npm install-scripts approve sharp` si une capture d'écran échoue
+cp .env.example .env   # IOS_PLATFORM_VERSION=26.4.2, XCODE_ORG_ID=<Team ID du compte développeur>, WDA_BUNDLE_ID=<bundle à nous>, DATABASE_URL
+npm run db:up && npm run db:migrate     # ou un Postgres local, DATABASE_URL à ajuster
+npm run wda:prepare                      # depuis Terminal.app (Trousseau de session), pas en SSH
+# puis, chacun dans son terminal : npm run appium / npm run wda:service / npm run worker / npm run web → http://127.0.0.1:3000
+```
+
+Prérequis côté iPhone et Xcode : `runbook-mac-mini-ios.md` §0 à §2 (compte développeur dans Xcode → Réglages → Comptes, « Faire confiance », Mode développeur, Developer Disk Image). Doc du dépôt : `docs/getting-started.md`, `docs/architecture.md`, `docs/coordinates.md`.
 
 ## 2. Où en est-on (2026-09-23)
 
@@ -59,7 +93,7 @@ Deux dépôts : `ofmai` (la plateforme, Next.js) et `ofmai-farm` (la ferme, Pyth
 
 ### Ce qui reste (dans l'ordre)
 
-0. **Le premier iPhone sur le Mac mini** : `runbook-mac-mini-ios.md` §0 à §2, jusqu'au dump d'écran. Puis la fiche française de Léa Marchand, sa ligne dans son Apple ID, les trois apps, le relevé des écrans iOS. Tout le reste de cette liste vaut pour les comptes GeeLark restants.
+0. **Le premier iPhone sur le Mac mini** : essayer d'abord Kevs-IOS-Agents (§1 quater) ; sinon `runbook-mac-mini-ios.md` §0 à §2, jusqu'au dump d'écran. Puis la fiche française de Léa Marchand, sa ligne dans son Apple ID, les trois apps, le relevé des écrans iOS. Tout le reste de cette liste vaut pour les comptes GeeLark restants.
 1. **Inscription Instagram** : corriger les cinq points ci-dessus dans `gitd/skills/base.py` (balayage générique désactivé quand le skill liste ses popups ; mois lettre par lettre ; `text_any` déjà en place ; `monkey` déjà en place), puis **prouver le parcours complet sur l'explorateur avec une boîte mail neuve**, chrono en main (cible : ≈ 30 s de skill entre deux portes humaines ; seules portes : code mail, captcha, SMS). Seulement ensuite, Sierra, avec une **nouvelle** boîte Proton (recovery validée avant tout).
 1 bis. **Prouver le compositeur sur l'explorateur** : une session Instagram en phase network avec `FARM_OFMAI_BASE_URL` posé, relire les `FarmEvent comment_composed` dans l'admin, puis seulement les vrais comptes. Committer côté OFMAI (route + `lib/social`).
 2. Respecter le budget minutes en cours de parcours orienté (`warm.py`).

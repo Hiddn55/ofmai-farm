@@ -1,7 +1,7 @@
 # Les iPhones de la ferme — registre et procédure
 
 > **Nature** : registre + procédure
-> **À jour au** : 2026-10-20
+> **À jour au** : 2026-10-31
 > **Répond à** : quel iPhone porte quel personnage, quelle ligne, quel Apple ID ; comment on met un iPhone en service ; où sont les secrets.
 > **Règle** : un iPhone = un personnage = une ligne = un Apple ID. Aucun mot de passe dans ce fichier : tout est dans le Trousseau du Mac mini.
 
@@ -46,7 +46,16 @@ Le compte développeur Apple (99 $/an, celui qui signe WebDriverAgent) est **un 
 5. Réglages → Général → VPN et gestion : **doit être vide** (pas de profil de gestion d'entreprise).
 6. Réglages → Général → Mise à jour logicielle : installer la dernière version d'iOS.
 7. Réglages → Luminosité : minimum ; Verrouillage automatique : **Jamais**.
-8. Noter série, UDID, IMEI dans le registre (§1).
+8. **Réglages de ferme** (repris le 31/10/2026 d'un opérateur d'environ 100 iPhones, `ETAT.md` §1 ter ; **non prouvé chez nous**) :
+   - Réglages → Général → AirDrop : **Réception désactivée**, et « Rapprocher les appareils » désactivé. Sinon les téléphones posés côte à côte se proposent des fichiers, vibrent et ouvrent des fenêtres qui bloquent les skills.
+   - Réglages → En veille : **désactivé**. Sinon un iPhone qui charge posé à l'horizontale passe en mode veille.
+   - Centre de contrôle : **orientation verrouillée** en portrait.
+   - Réglages → Confidentialité et sécurité → Service de localisation : **désactivé**.
+   - Réglages → Sons et vibrations : son du clavier coupé (Retour du clavier), volume au minimum.
+   - Concentration → **Ne pas déranger** : activé. Les SMS arrivent quand même dans Messages.
+
+   Lui règle le verrouillage automatique sur 5 min ; on garde **Jamais** (point 7).
+9. Noter série, UDID, IMEI dans le registre (§1).
 
 ### 3.2 Branchement au Mac mini (le test WebDriverAgent)
 

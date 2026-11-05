@@ -2,7 +2,7 @@
 
 > **Nature** : reference
 > **Statut** : à vérifier — la détection écran, la machine d'états et `clear-health` sont dans le code du fork ; les canaris, les règles collectives, l'escalade Discord et le tableau de bord farm n'existent pas encore
-> **À jour au** : 2026-09-14
+> **À jour au** : 2026-09-14 ; §2 bis ajouté le 2026-10-31
 > **Répond à** : comment la ferme sait qu'un compte est en danger, ce qu'elle fait toute seule, ce qu'elle laisse à un humain, et comment on voit tout ça
 > **Code concerné** : fork ofmai-farm `gitd/farm/health.py`, `gitd/farm/policy.py` (§ Health state machine), `gitd/farm/ledger.py`, `gitd/farm/warm.py`, `gitd/farm/skillkit.py`, `gitd/farm/planner.py`, `gitd/farm/cli.py`, `gitd/farm/models.py`, `gitd/skills/checkpoint.py`, `gitd/routers/scheduler.py`, `frontend/src/views/SchedulerView.vue`, `tests/test_farm_health.py`, `tests/test_farm_policy.py`, `tests/test_farm_ledger.py` ; OFMAI `lib/core/discord-alerts.ts`, `.claude/loop/notify.mjs`, `app/api/farm/events` (à créer, `bridge-ofmai-farm.md`), `lib/social/health.ts` (à créer)
 
@@ -49,6 +49,20 @@ Règles communes :
 - Un verdict positif appelle `FarmSession.signal("shadowban", matched="<règle> …")` sur le compte **observé** (pas sur l'observateur, qui n'est pas dans le ledger) → état `SHADOWBAN_SUSPECT` 7 jours (§3) → événement `health_signal` vers OFMAI (`bridge-ofmai-farm.md` §4.1).
 - Le retrait d'un post Reddit n'est pas un shadowban : c'est un strike sur le sub (§4).
 - L'observateur n'est pas un `farm_accounts` : `ledger.add_account()` le chaufferait et refuse `--role observer` (E1.1, `test_add_account_rejects_role_observer`). Son serial vit dans la config du fork (`FARM_OBSERVER_DEVICE`, `gitd/config.py`, à créer E1.3) et côté OFMAI dans `SocialAccount.role = "observer"` (`bridge-ofmai-farm.md` §3.1) pour la lecture seule ; le pont ne le recopie jamais. Il est facturé à la minute : `growth-farm-watch.js` le démarre, le relie, enfile les `canary_check`, l'éteint (`build-plan.md` §12).
+
+## 2 bis. Repères d'un opérateur Instagram (veille du 31/10/2026)
+
+Un opérateur OFM qui fait tourner environ 100 iPhones juge ses comptes Instagram à leurs vues (`ETAT.md` §1 ter). Ses repères ne sont **pas prouvés chez nous** : ils servent de point de départ au calibrage du §2, pas de règle.
+
+| Ce qu'il observe | Ce qu'il fait | Ce qu'on en fait |
+|---|---|---|
+| Un compte bloqué à 3 ou 4 vues par reel | il le supprime | c'est notre `zero_reach` (≤ 2 vues sur 3 posts, §1) : garder ce seuil et le vérifier sur les premiers comptes |
+| Aucun reel au-dessus d'environ 200 vues après 3 semaines de publication régulière | il le supprime (compte « bridé ») | **signal à ajouter** à `canary.py`. La règle des 10 % de la référence ne voit pas un compte bridé dès le départ, puisque sa médiane est basse elle aussi. Verdict `shadowban`, même chemin que le §2 [à calibrer] |
+| Un compte banni dans les 24 h qui suivent son premier pic | il en relance d'autres | rien de nouveau : `suspended`, humain obligatoire (S5) |
+| 3 000 à 4 000 vues stables pendant une semaine | compte sain, gardé | repère de compte sain pour lire les métriques (`metrics-attribution.md`) |
+| La plupart des comptes décollent en 3 semaines environ, à 3 ou 4 reels par jour, avec 100 à 200 vues au début | patience | le signal du plafond à 200 vues ne s'évalue qu'après 3 semaines de publication ; avant, 100 à 200 vues sont la norme |
+
+La différence de fond : lui crée des centaines de comptes et jette ceux qui déçoivent. Un personnage ne se jette pas : un repère franchi le met en `shadowban_suspect` (S2) et appelle un regard humain.
 
 ## 3. Machine d'états (`policy.Health`, recopiée du code)
 
